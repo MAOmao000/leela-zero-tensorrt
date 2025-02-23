@@ -51,9 +51,7 @@
 #include "Timing.h"
 #include "Training.h"
 #include "Utils.h"
-#ifdef USE_OPENCL
 #include "GPUScheduler.h"
-#endif
 
 using namespace Utils;
 
@@ -194,10 +192,6 @@ void UCTSearch::update_root() {
     // So reset this count now.
     m_playouts = 0;
 
-#ifndef NDEBUG
-    auto start_nodes = m_root->count_nodes_and_clear_expand_state();
-#endif
-
     if (!advance_to_new_rootstate() || !m_root) {
         m_root = std::make_unique<UCTNode>(FastBoard::PASS, 0.0f);
     }
@@ -205,15 +199,7 @@ void UCTSearch::update_root() {
     m_last_rootstate.reset(nullptr);
 
     // Check how big our search tree (reused or new) is.
-    m_nodes = m_root->count_nodes_and_clear_expand_state();
-
-#ifndef NDEBUG
-    if (m_nodes > 0) {
-        myprintf("update_root, %d -> %d nodes (%.1f%% reused)\n",
-                 start_nodes, m_nodes.load(),
-                 100.0 * m_nodes.load() / start_nodes);
-    }
-#endif
+    m_nodes = static_cast<int>(m_root->count_nodes_and_clear_expand_state());
 }
 
 float UCTSearch::get_min_psa_ratio() const {
@@ -239,6 +225,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
                                         UCTNode* const node) {
     const auto color = currstate.get_to_move();
     auto result = SearchResult{};
+    if (!is_running()) return result;
     auto new_node = false;
 
     node->virtual_loss();
@@ -258,17 +245,21 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
 
             // Careful: create_children() can throw a NetworkHaltException when
             // another thread requests draining the search.
-            const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
-            if (!had_children && success) {
-                result = SearchResult::from_eval(eval);
-                new_node = true;
+            try {
+                const auto success = node->create_children(
+                    m_network, m_nodes, currstate, eval, get_min_psa_ratio());
+                if (!had_children && success) {
+                    result = SearchResult::from_eval(eval);
+                    new_node = true;
+                }
+            } catch (NetworkHaltException&) {
+                return result;
             }
         }
     }
 
     if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(color, node == m_root.get());
+        auto next = node->uct_select_child(currstate, color, node == m_root.get());
         auto move = next->get_move();
 
         currstate.play_move(move);
@@ -488,7 +479,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
         m_root->randomize_first_proportionally();
     }
 
-    auto first_child = m_root->get_first_child();
+    auto first_child = m_root->get_noladder_child(m_rootstate);;
     assert(first_child != nullptr);
 
     auto bestmove = first_child->get_move();
@@ -788,7 +779,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     m_root->prepare_root_node(m_network, color, m_nodes, m_rootstate);
 
     m_run = true;
-    int cpus = cfg_num_threads;
+    int cpus = static_cast<int>(cfg_num_threads);
     ThreadGroup tg(thread_pool);
     for (int i = 0; i < cpus; i++) {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
@@ -828,7 +819,6 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     // Stop the search.
     m_run = false;
-#ifdef USE_OPENCL
     if (cfg_use_drain_resume) {
         m_network.drain_evals();
         tg.wait_all();
@@ -836,9 +826,6 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     } else {
         tg.wait_all();
     }
-#else
-    tg.wait_all();
-#endif
 
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
@@ -860,15 +847,6 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     myprintf("%d visits, %d nodes, %d playouts, %.0f n/s\n\n",
              m_root->get_visits(), m_nodes.load(), m_playouts.load(),
              (m_playouts * 100.0) / (elapsed_centis + 1));
-
-#ifdef USE_OPENCL
-#if !defined(USE_CUDNN) && !defined(USE_TENSOR_RT)
-#ifndef NDEBUG
-    myprintf("batch stats: %d %d\n",
-             batch_stats.single_evals.load(), batch_stats.batch_evals.load());
-#endif
-#endif
-#endif
 
     int bestmove = get_best_move(passflag);
 
@@ -931,7 +909,6 @@ void UCTSearch::ponder() {
 
     // Stop the search.
     m_run = false;
-#ifdef USE_OPENCL
     if (cfg_use_drain_resume) {
         m_network.drain_evals();
         tg.wait_all();
@@ -939,9 +916,6 @@ void UCTSearch::ponder() {
     } else {
         tg.wait_all();
     }
-#else
-    tg.wait_all();
-#endif
 
     // Display search info.
     myprintf("\n");

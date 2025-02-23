@@ -40,7 +40,6 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
-#ifdef USE_TENSOR_RT
 #include "NvInfer.h"
 
 namespace trtLog {
@@ -58,10 +57,6 @@ public:
                     break;
                 case Severity::kERROR:
                     std::cerr << "[E] " << msg << std::endl;
-#ifndef NDEBUG
-                    std::cout << boost::stacktrace::stacktrace();
-                    exit(0);
-#endif
                     break;
                 case Severity::kWARNING:
                     std::cerr << "[W] " << msg << std::endl;
@@ -87,7 +82,6 @@ private:
     Severity mReportableSeverity;
 };
 }
-#endif
 
 struct MoveToAvoid {
     int color;
@@ -146,30 +140,19 @@ extern int cfg_random_min_visits;
 extern float cfg_random_temp;
 extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
-enum class backend_t {
-    NONE, OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
-};
-extern backend_t cfg_backend;
-extern bool cfg_NCHW;
-#ifdef USE_OPENCL
+extern int cfg_builder_opt_level;
 extern std::vector<int> cfg_gpus;
-extern bool cfg_sgemm_exhaustive;
-extern bool cfg_tune_only;
 extern bool cfg_use_drain_resume;
-#ifdef USE_TENSOR_RT
 extern trtLog::Logger cfg_logger;
 enum class trtcache_t {
     PLAN, TIMING
 };
 extern bool cfg_cache_plan;
-#endif
-#ifdef USE_HALF
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
-#endif
-#endif
+
 extern float cfg_puct;
 extern float cfg_logpuct;
 extern float cfg_logconst;
@@ -188,16 +171,22 @@ extern FILE* cfg_logfile_handle;
 extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
-extern bool cfg_cpu_only;
 extern bool cfg_use_stdev_uct;
 
-extern bool cfg_ladder_check;
+enum class chase_t {
+    EVERY, ROOT, PLAYOUT
+};
+extern chase_t cfg_ladder_chase;
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
-extern int cfg_ladder_depth;
-extern int cfg_ladder_penalty_winrate;
+extern int cfg_ladder_depth_defense;
+extern int cfg_ladder_depth_offense;
+extern int cfg_ladder_check_nodes;
+extern float cfg_ladder_penalty_winrate;
+extern float cfg_chase_penalty_policy;
+extern double cfg_chase_penalty_value;
 
 extern AnalyzeTags cfg_analyze_tags;
 

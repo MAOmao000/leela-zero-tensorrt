@@ -41,17 +41,7 @@
 #include "GTP.h"
 #include "SMP.h"
 #include "ThreadPool.h"
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
 #include "Backend.h"
-#endif
-
-#ifndef NDEBUG
-struct batch_stats_t {
-    std::atomic<size_t> single_evals{0};
-    std::atomic<size_t> batch_evals{0};
-};
-extern batch_stats_t batch_stats;
-#endif
 
 template <typename net_t>
 class GPUScheduler : public ForwardPipe {
@@ -137,13 +127,10 @@ private:
     // set to true when single (non-batch) eval is in progress
     std::atomic<bool> m_single_eval_in_progress{false};
     std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
-#endif
 
-protected: // Member variables used by OpenCLSheduler
+protected: // Member variables used by GPUSheduler
     bool m_running = true;
-    std::vector<std::unique_ptr<OpenCL_Network<net_t>>> m_networks;
     std::mutex m_mutex;
     std::condition_variable m_cv;
     std::list<std::thread> m_worker_threads;

@@ -44,6 +44,7 @@
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
+#include "LadderDetection.h"
 
 /*
  * These functions belong to UCTNode but should only be called on the root node
@@ -166,15 +167,29 @@ void UCTNode::randomize_first_proportionally() {
     std::iter_swap(begin(m_children), begin(m_children) + index);
 }
 
-UCTNode* UCTNode::get_nopass_child(FastState& state) const {
-    for (const auto& child : m_children) {
-        /* If we prevent the engine from passing, we must bail out when
-           we only have unreasonable moves to pick, like filling eyes.
-           Note that this knowledge isn't required by the engine,
-           we require it because we're overruling its moves. */
-        if (child->m_move != FastBoard::PASS
-            && !state.board.is_eye(state.get_to_move(), child->m_move)) {
-            return child.get();
+UCTNode* UCTNode::get_nopass_child(GameState& state) {
+    if (cfg_ladder_chase == chase_t::ROOT) {
+        for (const auto& child : m_children) {
+            /* If we prevent the engine from passing, we must bail out when
+               we only have unreasonable moves to pick, like filling eyes.
+               Note that this knowledge isn't required by the engine,
+               we require it because we're overruling its moves. */
+            if (child->m_move != FastBoard::PASS
+                && !state.board.is_eye(state.get_to_move(), child->m_move)
+                && !IsLadderRoot(&state, child->m_move)) {
+                return child.get();
+            }
+        }
+    } else {
+        for (const auto& child : m_children) {
+            /* If we prevent the engine from passing, we must bail out when
+               we only have unreasonable moves to pick, like filling eyes.
+               Note that this knowledge isn't required by the engine,
+               we require it because we're overruling its moves. */
+            if (child->m_move != FastBoard::PASS
+                && !state.board.is_eye(state.get_to_move(), child->m_move)) {
+                return child.get();
+            }
         }
     }
     return nullptr;
@@ -228,4 +243,27 @@ void UCTNode::prepare_root_node(Network& network, const int color,
         auto alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;
         dirichlet_noise(0.25f, alpha);
     }
+}
+
+UCTNode* UCTNode::get_noladder_child(GameState& state) {
+    if (m_children.empty()) {
+        return nullptr;
+    }
+    if (cfg_ladder_chase != chase_t::ROOT) {
+        return m_children.front().get();
+    }
+
+/**/
+    UCTNode* front_child = m_children.front().get();
+    if (front_child->m_move == FastBoard::PASS) {
+        return front_child;
+    }
+    for (const auto& child : m_children) {
+        if (child->m_move == FastBoard::PASS ||
+            !IsLadderRoot(&state, child->m_move)) {
+            return child.get();
+        }
+    }
+    return front_child;
+/**/
 }

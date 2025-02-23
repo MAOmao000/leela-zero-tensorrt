@@ -4,9 +4,15 @@
 #include "GameState.h"
 
 void LadderDetection(
-    const GameState* const state,
+    GameState* const state,
     int *ladder_pos,
     const std::array<float, NUM_INTERSECTIONS>& policy,
-    const float ladder_min_policy
+    const float ladder_min_policy,
+    const int check_nodes = INT_MAX
+);
+
+bool IsLadderRoot(
+    GameState* const state,
+    const int move_vertex
 );
 #endif

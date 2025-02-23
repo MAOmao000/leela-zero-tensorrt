@@ -40,6 +40,7 @@
 #include <numeric>
 #include <utility>
 #include <vector>
+#include <boost/stacktrace.hpp>
 
 #include "UCTNode.h"
 
@@ -61,7 +62,7 @@ bool UCTNode::first_visit() const {
 }
 
 bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
-                              const GameState& state, float& eval,
+                              GameState& state, float& eval,
                               const float min_psa_ratio) {
     // no successors in final state
     if (state.get_passes() >= 2) {
@@ -106,7 +107,8 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex)) {
+        if (state.is_move_legal(to_move, vertex)
+            && raw_netlist.policy[i] >= 0.0f) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
@@ -189,7 +191,6 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
             ++nodecount;
         }
     }
-
     m_min_psa_ratio_children = skipped_children ? min_psa_ratio : 0.0f;
 }
 
@@ -304,7 +305,7 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -353,8 +354,8 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
                 auto variance = child.get_eval_variance(1.0f);
                 auto stddev = std::sqrt(variance);
                 auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
-                k = std::max(0.5, (double)k);
-                k = std::min(1.4, (double)k);
+                k = std::max(0.5f, k);
+                k = std::min(1.4f, k);
                 auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
                 stdev = alpha * k + (1.0f - alpha) * 1.0f;
             }
@@ -363,9 +364,20 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
-        const auto value = winrate + puct;
+        auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
+        if (cfg_ladder_chase == chase_t::PLAYOUT) {
+            const auto move = child.get_move();
+            if (state.m_komove == FastBoard::NO_VERTEX && move != FastBoard::PASS) {
+                if (IsLadderRoot(&state, move)) {
+                    if (child.is_inflated()) {
+                        child.get()->set_policy(psa * cfg_chase_penalty_policy);
+                    }
+                    value *= cfg_chase_penalty_value;
+                }
+            }
+        }
         if (value > best_value) {
             best_value = value;
             best = &child;
@@ -378,8 +390,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
 }
 
 class NodeComp
-//    : public std::binary_function<UCTNodePointer&, UCTNodePointer&, bool> {
-    : public std::function<bool(UCTNodePointer&, UCTNodePointer&)> {
+    : public std::function<bool(const UCTNodePointer&, const UCTNodePointer&)> {
 public:
     NodeComp(const int color, const float lcb_min_visits)
         : m_color(color), m_lcb_min_visits(lcb_min_visits) {}

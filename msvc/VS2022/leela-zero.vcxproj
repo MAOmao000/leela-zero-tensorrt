@@ -20,34 +20,28 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\Backend.h" />
-    <ClInclude Include="..\..\src\BackendCuDNN.h" />
-    <ClInclude Include="..\..\src\BackendGraph.h" />
     <ClInclude Include="..\..\src\BackendTensorRT.h" />
-    <ClInclude Include="..\..\src\CL\cl2.hpp" />
     <ClInclude Include="..\..\src\config.h" />
     <ClInclude Include="..\..\src\FastBoard.h" />
     <ClInclude Include="..\..\src\FastState.h" />
+    <ClInclude Include="..\..\src\ForwardPipe.h" />
     <ClInclude Include="..\..\src\FullBoard.h" />
     <ClInclude Include="..\..\src\GameState.h" />
     <ClInclude Include="..\..\src\GPUScheduler.h" />
     <ClInclude Include="..\..\src\GTP.h" />
-    <ClInclude Include="..\..\src\Im2Col.h" />
     <ClInclude Include="..\..\src\KoState.h" />
+    <ClInclude Include="..\..\src\LadderDetection.h" />
     <ClInclude Include="..\..\src\Network.h" />
     <ClInclude Include="..\..\src\NNCache.h" />
-    <ClInclude Include="..\..\src\ForwardPipe.h" />
-    <ClInclude Include="..\..\src\CPUPipe.h" />
-    <ClInclude Include="..\..\src\OpenCL.h" />
-    <ClInclude Include="..\..\src\OpenCLScheduler.h" />
     <ClInclude Include="..\..\src\Random.h" />
     <ClInclude Include="..\..\src\SGFParser.h" />
     <ClInclude Include="..\..\src\SGFTree.h" />
+    <ClInclude Include="..\..\src\sha2.h" />
     <ClInclude Include="..\..\src\SMP.h" />
     <ClInclude Include="..\..\src\ThreadPool.h" />
     <ClInclude Include="..\..\src\TimeControl.h" />
     <ClInclude Include="..\..\src\Timing.h" />
     <ClInclude Include="..\..\src\Training.h" />
-    <ClInclude Include="..\..\src\Tuner.h" />
     <ClInclude Include="..\..\src\UCTNode.h" />
     <ClInclude Include="..\..\src\UCTNodePointer.h" />
     <ClInclude Include="..\..\src\UCTSearch.h" />
@@ -56,42 +50,38 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\Backend.cpp" />
-    <ClCompile Include="..\..\src\BackendCuDNN.cpp" />
-    <ClCompile Include="..\..\src\BackendGraph.cpp" />
-    <ClCompile Include="..\..\src\BackendTensorRT.cpp" />
+    <ClCompile Include="..\..\src\BackendTensorRT.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\FastBoard.cpp" />
     <ClCompile Include="..\..\src\FastState.cpp" />
     <ClCompile Include="..\..\src\FullBoard.cpp" />
-    <ClCompile Include="..\..\src\GameState.cpp" />
-    <ClCompile Include="..\..\src\GPUScheduler.cpp">
+    <ClCompile Include="..\..\src\GameState.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\..\src\GPUScheduler.cpp" />
     <ClCompile Include="..\..\src\GTP.cpp" />
     <ClCompile Include="..\..\src\KoState.cpp" />
-    <ClCompile Include="..\..\src\LadderDetection.cpp" />
+    <ClCompile Include="..\..\src\LadderDetection.cpp">
+      <RuntimeLibrary Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
     <ClCompile Include="..\..\src\Leela.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\Network.cpp" />
-    <ClCompile Include="..\..\src\NNCache.cpp" />
-    <ClCompile Include="..\..\src\CPUPipe.cpp">
+    <ClCompile Include="..\..\src\NNCache.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\src\OpenCL.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\..\src\OpenCLScheduler.cpp" />
     <ClCompile Include="..\..\src\Random.cpp" />
     <ClCompile Include="..\..\src\SGFParser.cpp" />
-    <ClCompile Include="..\..\src\SGFTree.cpp" />
-    <ClCompile Include="..\..\src\sha2.cpp">
+    <ClCompile Include="..\..\src\SGFTree.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\..\src\sha2.cpp" />
     <ClCompile Include="..\..\src\SMP.cpp" />
     <ClCompile Include="..\..\src\TimeControl.cpp" />
     <ClCompile Include="..\..\src\Timing.cpp" />
-    <ClCompile Include="..\..\src\Training.cpp" />
-    <ClCompile Include="..\..\src\Tuner.cpp">
+    <ClCompile Include="..\..\src\Training.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\UCTNode.cpp" />
@@ -100,19 +90,6 @@
     <ClCompile Include="..\..\src\UCTSearch.cpp" />
     <ClCompile Include="..\..\src\Utils.cpp" />
     <ClCompile Include="..\..\src\Zobrist.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <CudaCompile Include="..\..\src\SEnet.cu">
-      <FileType>Document</FileType>
-      <Include Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\IGO\leela-zero-cudnn\src;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(Include)</Include>
-      <UseHostInclude Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</UseHostInclude>
-      <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_89,sm_89</CodeGeneration>
-      <Defines Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Defines)</Defines>
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">O2</Optimization>
-      <Runtime Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MT</Runtime>
-      <RuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Default</RuntimeChecks>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </CudaCompile>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
@@ -145,16 +122,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
-    <LLVMToolsVersion>17</LLVMToolsVersion>
+    <LLVMToolsVersion>19</LLVMToolsVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.props" />
-  </ImportGroup>
+  <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared">
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -175,16 +150,16 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>..\..\src\Eigen;$(IncludePath)</IncludePath>
+    <IncludePath>C:\IGO\leela-zero\src\Eigen;$(IncludePath)</IncludePath>
+    <TargetName>leelaz_trt</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>leelaz_full</TargetName>
+    <TargetName>leelaz</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
-    <IncludePath>..\..\src\Eigen;$(IncludePath)</IncludePath>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
@@ -210,11 +185,18 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\lib\TensorRT-10.0.0.6\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\nvidia\include;C:\lib\vcpkg\installed\x64-windows-static\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/source-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>C:\lib\TensorRT-10.0.0.6\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\nvidia\lib\x64;C:\lib\vcpkg\installed\x64-windows-static\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>boost_program_options-vc140-mt-gd.lib;boost_filesystem-vc140-mt-gd.lib;boost_system-vc140-mt-gd.lib;zlibd.lib;cudart_static.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>libcmt.lib;msvcrt.lib;msvcrtd.lib</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -244,8 +226,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_DNNL;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\lib\oneDNN\include;C:\lib\oneDNN\build\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\nvidia\include;..\..\src\cudnn-frontend\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\TensorRT-10.0.0.6\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\lib\TensorRT-10.0.0.6\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\nvidia\include;C:\lib\vcpkg\installed\x64-windows-static\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -265,7 +247,7 @@
       <OpenMPSupport>
       </OpenMPSupport>
       <FloatingPointModel>Fast</FloatingPointModel>
-      <AdditionalOptions>/arch:AVX2 /D"__FMA__" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/arch:AVX2 /D"__FMA__" -Wno-nan-infinity-disabled %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -275,35 +257,28 @@
       <OptimizeReferences>
       </OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\lib\oneDNN\build\src\Release;C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\lib\nvidia\lib\x64;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\TensorRT-10.0.0.6\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libopenblas.lib;dnnl.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\lib\TensorRT-10.0.0.6\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\nvidia\lib\x64;C:\lib\vcpkg\installed\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>
       </ForceSymbolReferences>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
-      <StackReserveSize>16777216</StackReserveSize>
+      <StackReserveSize>
+      </StackReserveSize>
       <LargeAddressAware>true</LargeAddressAware>
-      <StackCommitSize>8192</StackCommitSize>
+      <StackCommitSize>
+      </StackCommitSize>
+      <HeapReserveSize>
+      </HeapReserveSize>
+      <HeapCommitSize>
+      </HeapCommitSize>
     </Link>
-    <CudaCompile>
-      <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>
-      <CodeGeneration>compute_89,sm_89;%(CodeGeneration)</CodeGeneration>
-      <FastMath>true</FastMath>
-      <Optimization>InheritFromHost</Optimization>
-      <Runtime>MT</Runtime>
-      <Defines>_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(Defines)</Defines>
-    </CudaCompile>
-    <CudaLink>
-      <GPUDebugInfo>false</GPUDebugInfo>
-    </CudaLink>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.targets" />
-  </ImportGroup>
+  <ImportGroup Label="ExtensionTargets" />
 </Project>

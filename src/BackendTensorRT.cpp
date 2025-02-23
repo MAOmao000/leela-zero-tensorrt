@@ -19,7 +19,6 @@
 
 #include "config.h"
 
-#if defined(USE_TENSOR_RT)
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <cstdio>
@@ -85,7 +84,7 @@ bool BackendTRT<net_t>::build(
     if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
-        config->setBuilderOptimizationLevel(5);
+        config->setBuilderOptimizationLevel(cfg_builder_opt_level);
     }
     // Typical runtime allocation is much less than the 1 GiB specified below
     config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
@@ -554,9 +553,10 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.name + ".act",
                     ActivationType::kRELU);
                 // value_conv = tf.reshape(value_conv, [-1, 1 * go.N * go.N])
-                int32_t const mmInputs = actValueLayer->getOutput(0)->getDimensions().d[1]
+                int32_t const mmInputs = static_cast<int32_t>(
+                    actValueLayer->getOutput(0)->getDimensions().d[1]
                     * actValueLayer->getOutput(0)->getDimensions().d[2]
-                    * actValueLayer->getOutput(0)->getDimensions().d[3]; 
+                    * actValueLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actValueLayer->getOutput(0));
                 inputReshape->setReshapeDimensions(Dims{2, {
                     static_cast<int32_t>(batch_size), mmInputs}});
@@ -641,9 +641,10 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.name + ".act",
                     ActivationType::kRELU);
                 // policy_conv = tf.reshape(policy_conv, [-1, 2 * go.N * go.N])
-                int32_t const mmInputs = actPolicyLayer->getOutput(0)->getDimensions().d[1]
+                int32_t const mmInputs = static_cast<int32_t>(
+                    actPolicyLayer->getOutput(0)->getDimensions().d[1]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[2]
-                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]; 
+                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
                 inputReshape->setReshapeDimensions(Dims{2, {
                     static_cast<int32_t>(batch_size), mmInputs}});
@@ -887,10 +888,7 @@ void BackendTRT<net_t>::push_input_convolution(
     const unsigned int channels,
     const unsigned int outputs,
     const std::vector<float>& weights,
-    const std::vector<float>& biases,
-    const float scale) {  // Dummy arguments for inheritance usage
-
-    (void)scale;
+    const std::vector<float>& biases) {
 
     size_t layer = get_layer_count();
 
@@ -912,14 +910,7 @@ void BackendTRT<net_t>::push_residual(
     const std::vector<float>& weights_1,
     const std::vector<float>& biases_1,
     const std::vector<float>& weights_2,
-    const std::vector<float>& biases_2,
-    const float scale_1,   // Dummy arguments for inheritance usage
-    const float scale_2,   // Dummy arguments for inheritance usage
-    const float scale_3) { // Dummy arguments for inheritance usage
-
-    (void)scale_1;
-    (void)scale_2;
-    (void)scale_3;
+    const std::vector<float>& biases_2) {
 
     size_t layer = get_layer_count();
 
@@ -947,14 +938,7 @@ void BackendTRT<net_t>::push_residual_se(
     const std::vector<float>& se_fc1_w,
     const std::vector<float>& se_fc1_b,
     const std::vector<float>& se_fc2_w,
-    const std::vector<float>& se_fc2_b,
-    const float scale_1,   // Dummy arguments for inheritance usage
-    const float scale_2,   // Dummy arguments for inheritance usage
-    const float scale_3) { // Dummy arguments for inheritance usage
-
-    (void)scale_1;
-    (void)scale_2;
-    (void)scale_3;
+    const std::vector<float>& se_fc2_b) {
 
     size_t layer = get_layer_count();
 
@@ -1002,7 +986,6 @@ void BackendTRT<net_t>::push_convolve(
         return;
     }
     push_weights_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels, 1, true);
-    //push_weights(layer, ip1_w, true);
     push_weights(layer, ip1_b, true);
     push_weights(layer, ip2_w, true);
     push_weights(layer, ip2_b, true);
@@ -1024,10 +1007,7 @@ void BackendTRT<net_t>::forward_activations(
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
     BackendContext& cudnn_context,
-    const int tid,
     const size_t batch_size) {
-
-    (void) tid;
 
     const auto inSize =
         batch_size *
@@ -1087,5 +1067,3 @@ void BackendTRT<net_t>::forward_activations(
 
 template class BackendTRT<float>;
 template class BackendTRT<half_float::half>;
-
-#endif

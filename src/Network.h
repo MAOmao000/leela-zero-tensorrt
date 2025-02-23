@@ -44,19 +44,9 @@
 #include "NNCache.h"
 #include "ForwardPipe.h"
 #include "GameState.h"
-#ifdef USE_OPENCL_SELFCHECK
-#include "SMP.h"
-#endif
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto FILTER_SIZE = 3;
-constexpr auto WINOGRAD_M = 4;
-constexpr auto WINOGRAD_ALPHA = WINOGRAD_M + FILTER_SIZE - 1;
-constexpr auto WINOGRAD_WTILES =
-    BOARD_SIZE / WINOGRAD_M + (BOARD_SIZE % WINOGRAD_M != 0);
-constexpr auto WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
-constexpr auto WINOGRAD_P = WINOGRAD_WTILES * WINOGRAD_WTILES;
-constexpr auto SQ2 = 1.4142135623730951f; // Square root of 2
 
 // See drain_evals() / resume_evals() for details.
 class NetworkHaltException : public std::exception {};
@@ -75,9 +65,9 @@ public:
 
     virtual ~Network() = default;
 
-    Netresult get_output(const GameState* state, Ensemble ensemble,
+    Netresult get_output(GameState* const state, Ensemble ensemble,
                          int symmetry = -1, bool read_cache = true,
-                         bool write_cache = true, bool force_selfcheck = false);
+                         bool write_cache = true);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -87,8 +77,7 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
-    float benchmark_time(int centiseconds);
-    void benchmark(const GameState* state, int iterations = 1600);
+    void benchmark(GameState* const state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
 
@@ -123,27 +112,8 @@ private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
 
-    static std::vector<float> winograd_transform_f(const std::vector<float>& f,
-                                                   int outputs, int channels);
-    static std::vector<float> zeropad_U(const std::vector<float>& U,
-                                        int outputs, int channels,
-                                        int outputs_pad, int channels_pad);
-    static void winograd_transform_in(const std::vector<float>& in,
-                                      std::vector<float>& V, int C);
-    static void winograd_transform_out(const std::vector<float>& M,
-                                       std::vector<float>& Y, int K);
-    static void winograd_convolve3(int outputs,
-                                   const std::vector<float>& input,
-                                   const std::vector<float>& U,
-                                   std::vector<float>& V,
-                                   std::vector<float>& M,
-                                   std::vector<float>& output);
-    static void winograd_sgemm(const std::vector<float>& U,
-                               const std::vector<float>& V,
-                               std::vector<float>& M, int C, int K);
-    Netresult get_output_internal(const GameState* state, int symmetry,
-                                  bool selfcheck = false);
-    void ladder_update(const GameState* const state, Network::Netresult& result);
+    Netresult get_output_internal(const GameState* state, int symmetry);
+    void ladder_update(GameState* const state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
                                       std::vector<float>::iterator white,
@@ -151,14 +121,8 @@ private:
     bool probe_cache(const GameState* state, Network::Netresult& result);
     std::unique_ptr<ForwardPipe>&& init_net(
         int channels, std::unique_ptr<ForwardPipe>&& pipe);
-#ifdef USE_HALF
     void select_precision(int channels);
-#endif
     std::unique_ptr<ForwardPipe> m_forward;
-#ifdef USE_OPENCL_SELFCHECK
-    void compare_net_outputs(const Netresult& data, const Netresult& ref);
-    std::unique_ptr<ForwardPipe> m_forward_cpu;
-#endif
 
     NNCache m_nncache;
 

@@ -65,89 +65,18 @@ enum class NetworkType {
 };
 
 /*
- * Features
- *
- * USE_BLAS: Optionally use a basic linear algebra library.
- * This is may perform faster than the included Eigen library,
- * and some BLAS libraries can target multiple CPU models.
- * Not all operations are performed on the GPU -
- * some operations won't get any speedup from it.
- * Also used for OpenCL self-checks.
- */
-//#define USE_BLAS
-
-/*
- * We use OpenBLAS by default, except on macOS, which has a fast BLAS
- * built-in. (Accelerate)
- */
-#if !defined(__APPLE__) && !defined(__MACOSX)
-#if defined(USE_BLAS)
-#define USE_OPENBLAS
-#endif
-#endif
-
-#ifdef USE_TENSOR_RT
-#define USE_CUDNN
-#endif
-
-/*
- * USE_MKL: Optionally allows using Intel Math Kernel library as
- * BLAS implementation. Note that MKL's license is not compatible with the GPL,
- * so do not redistribute the resulting binaries. It is fine to use it on your
- * own system.
- */
-//#define USE_MKL
-/*
- * USE_OPENCL: Use OpenCL acceleration for GPUs. This makes the program a lot
- * faster if you have a recent GPU. Don't use it on CPUs even if they have
- * OpenCL drivers - the BLAS version is much faster for those.
- */
-#ifndef USE_CPU_ONLY
-#define USE_OPENCL
-
-/*
- * USE_HALF: Include the half-precision OpenCL implementation when building.
- * The current implementation autodetects whether half-precision is better
- * or single-precision is better (half precision is chosen if it's 5% faster)
- * Half-precision OpenCL gains performance on some GPUs while losing some
- * accuracy on the calculation, but generally it is worth using half precision
- * if it is at least 5% faster.
- */
-#define USE_HALF
-
-/*
  * USE_TUNER: Expose some extra command line parameters that allow tuning the
  * search algorithm.
  */
 #define USE_TUNER
 
-#endif
+static constexpr auto PROGRAM_NAME = "Leela Zero(TensorRT ladder detection)";
+static constexpr auto PROGRAM_VERSION_MAJOR = "1";
+static constexpr auto PROGRAM_VERSION_MINOR = "0";
 
-
-static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
-static constexpr auto PROGRAM_VERSION_MAJOR = "2";
-static constexpr auto PROGRAM_VERSION_MINOR = "7";
-
-/*
- * OpenBLAS limitation: the default configuration on some Linuxes
- * is limited to 64 cores.
- */
-#if defined(USE_BLAS) && defined(USE_OPENBLAS)
-static constexpr auto MAX_CPUS = 64;
-#else
 static constexpr auto MAX_CPUS = 256;
-#endif
 
-#ifdef USE_HALF
 #include "half/half.hpp"
-#endif
-
-#ifdef USE_OPENCL
-// If OpenCL are fully usable, then check the OpenCL against CPU
-// implementation with some probability.
-#define USE_OPENCL_SELFCHECK
-static constexpr auto SELFCHECK_PROBABILITY = 2000;
-#endif
 
 #if (_MSC_VER >= 1400) /* VC8+ Disable all deprecation warnings */
 #pragma warning(disable : 4996)

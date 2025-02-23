@@ -73,7 +73,7 @@ static void calculate_thread_count_cpu(
         auto num_threads = vm["threads"].as<unsigned int>();
         if (num_threads > cfg_max_threads) {
             myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
-            num_threads = cfg_max_threads;
+            num_threads = static_cast<unsigned int>(cfg_max_threads);
         }
         cfg_num_threads = num_threads;
     } else {
@@ -81,7 +81,6 @@ static void calculate_thread_count_cpu(
     }
 }
 
-#ifdef USE_OPENCL
 static void calculate_thread_count_gpu(
     boost::program_options::variables_map& vm) {
     auto cfg_max_threads = size_t{MAX_CPUS};
@@ -100,24 +99,21 @@ static void calculate_thread_count_gpu(
         auto num_threads = vm["threads"].as<unsigned int>();
         if (num_threads > cfg_max_threads) {
             myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
-            num_threads = cfg_max_threads;
+            num_threads = static_cast<unsigned int>(cfg_max_threads);
         }
         cfg_num_threads = num_threads;
 
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            if (cfg_backend == backend_t::OPENCL) {
-                cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 2);
-            } else {
-                cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
-            }
+            cfg_batch_size =
+                (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
+            } else if (cfg_batch_size > cfg_num_threads) {
+                	cfg_batch_size = std::min(cfg_num_threads / 2, size_t{1});
             }
         }
     } else {
@@ -125,22 +121,13 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            if (cfg_backend == backend_t::OPENCL) {
-                cfg_batch_size = cfg_num_threads * 5 / 12;
-            } else {
-                cfg_batch_size = cfg_num_threads * 5 / 6;
-            }
+            cfg_batch_size = cfg_num_threads * 5 / 6 / 2;
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
-        if (cfg_backend == backend_t::OPENCL) {
-            cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
-        } else {
-            cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count);
-        }
+        cfg_num_threads =
+            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -149,17 +136,9 @@ static void calculate_thread_count_gpu(
         exit(EXIT_FAILURE);
     }
 }
-#endif
 
 static void parse_commandline(const int argc, const char* const argv[]) {
     namespace po = boost::program_options;
-#ifndef USE_CPU_ONLY
-    std::string backend_str;
-    if (cfg_backend == backend_t::TENSORRT) backend_str = "tensorrt";
-    else if (cfg_backend == backend_t::CUDNNGRAPH) backend_str = "cudnngraph";
-    else if (cfg_backend == backend_t::CUDNN) backend_str = "cudnn";
-    else backend_str = "opencl";
-#endif
     // Declare the supported options.
     po::options_description gen_desc("Generic options");
     gen_desc.add_options()
@@ -177,7 +156,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("resignpct,r", po::value<int>()->default_value(cfg_resignpct),
                         "Resign when winrate is less than x%.\n"
                         "-1 uses 5% but scales for handicap.")
-//                        "-1 uses 10% but scales for handicap.")
         ("weights,w", po::value<std::string>()->default_value(cfg_weightsfile),
                       "File with network weights.")
         ("logfile,l", po::value<std::string>(),
@@ -193,26 +171,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("noponder", "Disable thinking on opponent's time.")
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
-#ifdef USE_OPENCL
-        ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
-        ("backend", po::value<std::string>()->default_value(backend_str),
-                    "[opencl"
-#if defined(USE_CUDNN)
-                    "|cudnn|cudnngraph"
-#endif
-#if defined(USE_TENSOR_RT)
-                    "|tensorrt"
-#endif
-                    "] Which backend engine to use.")
-#ifdef USE_TENSOR_RT
         ("trt-cache", po::value<std::string>()->default_value("plan"),
-            "Which to use: plan cache or timing cache? (plan/timing)")
-#endif
-#ifdef USE_CUDNN
-        ("channel-first", "Use Channel first format (NCHW) for tensor format.")
-#endif
-#endif
-        ("no_ladder_check", "Disable ladder check.")
+                      "Which to use: plan cache or timing cache? (plan/timing)")
+        ("ladder_chase", po::value<std::string>()->default_value("root"),
+                      "Ladder chase check timing. (every/root/playout)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -221,28 +183,32 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder defense check minimum stones.")
         ("offense_stones", po::value<int>()->default_value(cfg_offense_stones),
                       "Ladder offense check minimum stones.")
-        ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
-                      "Ladder check maximum depth.")
-        ("ladder_penalty_winrate", po::value<int>()->default_value(cfg_ladder_penalty_winrate),
+        ("ladder_depth_defense", po::value<int>()->default_value(cfg_ladder_depth_defense),
+                      "Ladder defense check maximum depth.")
+        ("ladder_depth_offense", po::value<int>()->default_value(cfg_ladder_depth_offense),
+                      "Ladder offense check maximum depth.")
+        ("ladder_check_nodes", po::value<int>()->default_value(cfg_ladder_check_nodes),
+                      "Number of nodes to check ladder.")
+        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
                       "The rate at which the ladder reduces the winning rate of the board.")
+        ("chase_penalty_policy", po::value<float>()->default_value(cfg_chase_penalty_policy),
+                      "The rate at which to reduce the policy if the ladder is tracked incorrectly.")
+        ("chase_penalty_value", po::value<double>()->default_value(cfg_chase_penalty_value),
+                      "The rate at which to reduce the value if the ladder is tracked incorrectly.")
       ;
-#ifdef USE_OPENCL
-    po::options_description gpu_desc("OpenCL device options");
+    po::options_description gpu_desc("TensorRT device options");
     gpu_desc.add_options()
         ("gpu", po::value<std::vector<int>>(),
-                "ID of the OpenCL device(s) to use (disables autodetection).")
-        ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
-        ("tune-only", "Tune OpenCL only and then exit.")
+                "ID of the TensorRT device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+        ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
+                      "Builder optimization level.")
         ("unuse_drain_resume", "Disable drain and formula.")
-#ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
-#endif
         ;
-#endif
     po::options_description selfplay_desc("Self-play options");
     selfplay_desc.add_options()
         ("noise,n", "Enable policy network randomization.")
@@ -255,7 +221,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                          "Don't play random moves if they have <= x visits.")
         ("randomtemp", po::value<float>()->default_value(cfg_random_temp),
                        "Temperature to use for random move selection.");
-#ifdef USE_TUNER
     po::options_description tuner_desc("Tuning options");
     tuner_desc.add_options()
         ("puct", po::value<float>())
@@ -271,30 +236,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
         ("unuse_stdev_uct", "Disable sample variance in UCT formula.");
-#endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
     po::options_description ignore("Ignored options");
-#ifndef USE_OPENCL
-    ignore.add_options()
-        ("batchsize", po::value<unsigned int>()->default_value(1),
-                      "Max batch size.");
-#endif
     po::options_description h_desc("Hidden options");
     h_desc.add_options()
         ("arguments", po::value<std::vector<std::string>>());
     po::options_description visible;
     visible
         .add(gen_desc)
-#if defined(USE_OPENCL)
         .add(gpu_desc)
-#endif
         .add(selfplay_desc)
-#ifdef USE_TUNER
         .add(tuner_desc);
-#else
-        ;
-#endif
     // Parse both the above, we will check if any of the latter are present.
     po::options_description all;
     all.add(visible).add(ignore).add(h_desc);
@@ -339,7 +292,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_quiet = true; // Set this early to avoid unnecessary output.
     }
 
-#ifdef USE_TUNER
     if (vm.count("puct")) {
         cfg_puct = vm["puct"].as<float>();
     }
@@ -379,7 +331,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("unuse_stdev_uct")) {
         cfg_use_stdev_uct = false;
     }
-#endif
 
     if (vm.count("logfile")) {
         cfg_logfile = vm["logfile"].as<std::string>();
@@ -400,99 +351,31 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gtp_mode = true;
     }
 
-#ifdef USE_OPENCL
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
 
-    if (vm.count("full-tuner")) {
-        cfg_sgemm_exhaustive = true;
-
-        // --full-tuner auto-implies --tune-only.  The full tuner is so slow
-        // that nobody will wait for it to finish befure running a game.
-        // This simply prevents some edge cases from confusing other people.
-        cfg_tune_only = true;
+    if (vm.count("builder_opt_level")) {
+        cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
     }
 
-    if (vm.count("tune-only")) {
-        cfg_tune_only = true;
-    }
-    if (vm.count("cpu-only")) {
-        cfg_cpu_only = true;
-    } else if (vm.count("unuse_drain_resume")) {
+    if (vm.count("unuse_drain_resume")) {
         cfg_use_drain_resume = false;
     }
-#else
-    cfg_cpu_only = true;
-#endif
 
-    if (cfg_cpu_only) {
-        calculate_thread_count_cpu(vm);
-        myprintf("Using CPU only batch size of %d\n", cfg_batch_size);
-#ifdef USE_OPENCL
-    } else if (vm.count("backend")) {
-        auto backend = vm["backend"].as<std::string>();
-        if ("opencl" == backend) {
-            cfg_backend = backend_t::OPENCL;
-#ifdef USE_TENSOR_RT
-        } else if ("tensorrt" == backend) {
-            cfg_backend = backend_t::TENSORRT;
-#endif
-#ifdef USE_CUDNN
-        } else if ("cudnngraph" == backend) {
-            cfg_backend = backend_t::CUDNNGRAPH;
-        } else if ("cudnn" == backend) {
-            cfg_backend = backend_t::CUDNN;
-#endif
-        } else {
-            printf("Unexpected option for --backend.\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-    if (cfg_backend == backend_t::TENSORRT) {
-        if (vm.count("channel-first")) {
-            printf("'--channel-first' option is only available for the cudnn backend.\n");
-            exit(EXIT_FAILURE);
-        }
-        cfg_NCHW = true;
-#ifdef USE_TENSOR_RT
-        auto trt_cache = vm["trt-cache"].as<std::string>();
-        if ("plan" == trt_cache) {
-            cfg_cache_plan = true;
-        } else if ("timing" == trt_cache) {
-            cfg_cache_plan = false;
-        } else {
-            printf("Unexpected option for --trt-cache, expecting plan/timing.\n");
-            exit(EXIT_FAILURE);
-        }
-#endif
-        calculate_thread_count_gpu(vm);
-        myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
-    } else if (cfg_backend == backend_t::CUDNNGRAPH) {
-        if (vm.count("channel-first")) {
-            printf("'--channel-first' option is only available for the cudnn backend.\n");
-            exit(EXIT_FAILURE);
-        }
-        calculate_thread_count_gpu(vm);
-        myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
-    } else if (cfg_backend == backend_t::CUDNN) {
-        if (vm.count("channel-first")) {
-            cfg_NCHW = true;
-        }
-        calculate_thread_count_gpu(vm);
-        myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
+    auto trt_cache = vm["trt-cache"].as<std::string>();
+    if ("plan" == trt_cache) {
+        cfg_cache_plan = true;
+    } else if ("timing" == trt_cache) {
+        cfg_cache_plan = false;
     } else {
-        if (vm.count("channel-first")) {
-            printf("'--channel-first' option is only available for the cudnn backend.\n");
-            exit(EXIT_FAILURE);
-        }
-        calculate_thread_count_gpu(vm);
-        myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
-#endif // USE_OPENCL
+        printf("Unexpected option for --trt-cache, expecting plan/timing.\n");
+        exit(EXIT_FAILURE);
     }
+    calculate_thread_count_gpu(vm);
+    myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
     myprintf("Using %d thread(s).\n", cfg_num_threads);
 
-#if defined(USE_OPENCL) && defined(USE_HALF)
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
         if ("single" == precision) {
@@ -507,15 +390,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-    if (cfg_precision == precision_t::AUTO) {
-        // Auto precision is not supported for full tuner cases.
-        if (cfg_sgemm_exhaustive) {
-            printf("Automatic precision not supported when doing exhaustive tuning\n");
-            printf("Please add '--precision single' or '--precision half'\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-#endif
 
     if (vm.count("seed")) {
         cfg_rng_seed = vm["seed"].as<std::uint64_t>();
@@ -626,8 +500,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // the best if we have introduced noise there exactly to explore more.
     cfg_fpu_root_reduction = cfg_noise ? 0.0f : cfg_fpu_reduction;
 
-    if (vm.count("no_ladder_check")) {
-        cfg_ladder_check = false;
+    if (vm.count("ladder_chase")) {
+        auto ladder_chase = vm["ladder_chase"].as<std::string>();
+        if (ladder_chase == "every") {
+            cfg_ladder_chase = chase_t::EVERY;
+        } else if (ladder_chase == "root") {
+            cfg_ladder_chase = chase_t::ROOT;
+        } else if (ladder_chase == "playout") {
+            cfg_ladder_chase = chase_t::PLAYOUT;
+        } else {
+            printf("Invalid ladder_chase value.\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
     if (vm.count("ladder_defense")) {
@@ -646,12 +530,28 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_offense_stones = vm["offense_stones"].as<int>();
     }
 
-    if (vm.count("ladder_depth")) {
-        cfg_ladder_depth = vm["ladder_depth"].as<int>();
+    if (vm.count("ladder_depth_defense")) {
+        cfg_ladder_depth_defense = vm["ladder_depth_defense"].as<int>();
+    }
+
+    if (vm.count("ladder_depth_offense")) {
+        cfg_ladder_depth_offense = vm["ladder_depth_offense"].as<int>();
+    }
+
+    if (vm.count("ladder_check_nodes")) {
+        cfg_ladder_check_nodes = vm["ladder_check_nodes"].as<int>();
     }
 
     if (vm.count("ladder_penalty_winrate")) {
-        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<int>();
+        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
+    }
+
+    if (vm.count("chase_penalty_policy")) {
+        cfg_chase_penalty_policy = vm["chase_penalty_policy"].as<float>();
+    }
+
+    if (vm.count("chase_penalty_value")) {
+        cfg_chase_penalty_value = vm["chase_penalty_value"].as<double>();
     }
 
     auto out = std::stringstream{};

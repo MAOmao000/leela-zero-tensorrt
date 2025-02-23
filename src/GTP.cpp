@@ -77,21 +77,12 @@ int cfg_random_min_visits;
 float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
-backend_t cfg_backend;
-bool cfg_NCHW;
-#ifdef USE_OPENCL
+int cfg_builder_opt_level;
 std::vector<int> cfg_gpus;
-bool cfg_sgemm_exhaustive;
-bool cfg_tune_only;
 bool cfg_use_drain_resume;
-#ifdef USE_TENSOR_RT
 trtLog::Logger cfg_logger{};
-#endif
 bool cfg_cache_plan;
-#ifdef USE_HALF
 precision_t cfg_precision;
-#endif
-#endif
 float cfg_puct;
 float cfg_logpuct;
 float cfg_logconst;
@@ -110,16 +101,19 @@ FILE* cfg_logfile_handle;
 bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
-bool cfg_cpu_only;
 bool cfg_use_stdev_uct;
 
-bool cfg_ladder_check;
+chase_t cfg_ladder_chase;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
-int cfg_ladder_depth;
-int cfg_ladder_penalty_winrate;
+int cfg_ladder_depth_defense;
+int cfg_ladder_depth_offense;
+int cfg_ladder_check_nodes;
+float cfg_ladder_penalty_winrate;
+float cfg_chase_penalty_policy;
+double cfg_chase_penalty_value;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -357,30 +351,13 @@ void GTP::setup_default_parameters() {
     cfg_timemanage = TimeManagement::AUTO; // --timemanage
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
-#ifdef USE_OPENCL
-    cfg_gpus = {};                       // --gpu
-    cfg_sgemm_exhaustive = false;        // --full-tuner
-    cfg_tune_only = false;               // --tune-only
-    cfg_use_drain_resume = true;         // --unuse_drain_resume
-#ifdef USE_TENSOR_RT
-    cfg_cache_plan = true;               // --trt-cache
-    cfg_backend = backend_t::TENSORRT;   // --backend
-#else
-#ifdef USE_CUDNN
-    cfg_backend = backend_t::CUDNNGRAPH; // --backend
-#else
-    cfg_backend = backend_t::OPENCL;     // --backend
-#endif
-#endif
-    cfg_NCHW = false;                    // --channel-first
+    cfg_builder_opt_level = 2;     // --builder_opt_level
+    cfg_gpus = {};                 // --gpu
+    cfg_use_drain_resume = true;   // --unuse_drain_resume
+    cfg_cache_plan = true;         // --trt-cache
 
-#ifdef USE_HALF
     cfg_precision = precision_t::AUTO;   // --precision
-#endif
-#else
-    cfg_backend = backend_t::NONE; // --backend
-    cfg_NCHW = false;              // --channel-first
-#endif
+
     cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
@@ -403,20 +380,20 @@ void GTP::setup_default_parameters() {
     cfg_logfile_handle = nullptr;    // -l, --logfile
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
-#ifdef USE_CPU_ONLY
-    cfg_cpu_only = true;             // --cpu-only
-#else
-    cfg_cpu_only = false;            // --cpu-only
-#endif
+
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_check = true;         // --no_ladder_check
-    cfg_ladder_defense = 12;         // --ladder_defense
-    cfg_ladder_offense = 12;         // --ladder_offense
-    cfg_defense_stones = 0;          // --defense_stones
-    cfg_offense_stones = 3;          // --offense_stones
-    cfg_ladder_depth = 100;          // --ladder_depth
-    cfg_ladder_penalty_winrate = 90; // --ladder_penalty_winrate
+    cfg_ladder_chase = chase_t::ROOT;  // --ladder_chase
+    cfg_ladder_defense = 1;            // --ladder_defense
+    cfg_ladder_offense = 12;           // --ladder_offense
+    cfg_defense_stones = 4;            // --defense_stones
+    cfg_offense_stones = 4;            // --offense_stones
+    cfg_ladder_depth_defense = 100;    // --ladder_depth_defense
+    cfg_ladder_depth_offense = 100;    // --ladder_depth_offense
+    cfg_ladder_check_nodes = 10;       // --ladder_check_nodes
+    cfg_ladder_penalty_winrate = 0.9f; // --ladder_penalty_winrate
+    cfg_chase_penalty_policy = 0.001f; // --chase_penalty_policy
+    cfg_chase_penalty_value = 0.01;    // --chase_penalty_value
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -627,6 +604,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
+        s_network->nncache_clear();
         s_network->forward_wait_time_reset();
         Training::clear_training();
         game.reset_game();
