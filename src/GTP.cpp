@@ -62,6 +62,7 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
+int cfg_batch_wait_time;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -340,6 +341,7 @@ void GTP::setup_default_parameters() {
     cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
+    cfg_batch_wait_time = 20;   // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -383,7 +385,7 @@ void GTP::setup_default_parameters() {
 
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_chase = chase_t::ROOT;  // --ladder_chase
+    cfg_ladder_chase = chase_t::EVERY; // --ladder_chase
     cfg_ladder_defense = 1;            // --ladder_defense
     cfg_ladder_offense = 12;           // --ladder_offense
     cfg_defense_stones = 4;            // --defense_stones
@@ -605,7 +607,6 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         return;
     } else if (command.find("clear_board") == 0) {
         s_network->nncache_clear();
-        s_network->forward_wait_time_reset();
         Training::clear_training();
         game.reset_game();
         search = std::make_unique<UCTSearch>(game, *s_network);
@@ -891,20 +892,24 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
-                                        Network::IDENTITY_SYMMETRY, false);
+//            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
+            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                  Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                vec = s_network->get_output(&game, Network::Ensemble::DIRECT, s,
-                                            false);
+//                vec = s_network->get_output(&game, Network::Ensemble::DIRECT, s,
+                s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
+                                      false);
                 Network::show_heatmap(&game, vec, false);
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            vec = s_network->get_output(&game, Network::Ensemble::AVERAGE, -1,
-                                        false);
+//            vec = s_network->get_output(&game, Network::Ensemble::AVERAGE, -1,
+            s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
+                                  false);
         } else {
-            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
-                                        std::stoi(symmetry), false);
+//            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
+            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                  std::stoi(symmetry), false);
         }
 
         if (symmetry != "all") {

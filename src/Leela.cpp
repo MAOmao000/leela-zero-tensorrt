@@ -107,7 +107,7 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             cfg_batch_size =
-                (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+                (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -121,13 +121,13 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            cfg_batch_size = cfg_num_threads * 5 / 6 / 2;
+            cfg_batch_size = cfg_num_threads * 5 / 6;
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
         cfg_num_threads =
-            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+            std::min(cfg_max_threads, cfg_batch_size * gpu_count);
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -173,7 +173,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "-m0 -t1 -s1.")
         ("trt-cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
-        ("ladder_chase", po::value<std::string>()->default_value("root"),
+        ("ladder_chase", po::value<std::string>()->default_value("every"),
                       "Ladder chase check timing. (every/root/playout)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
@@ -202,6 +202,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 "ID of the TensorRT device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+        ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
+                      "Wait time milliseconds for full batch.")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
         ("unuse_drain_resume", "Disable drain and formula.")
@@ -353,6 +355,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
+    }
+
+    if (vm.count("batchwait")) {
+        cfg_batch_wait_time = vm["batchwait"].as<int>();
     }
 
     if (vm.count("builder_opt_level")) {
