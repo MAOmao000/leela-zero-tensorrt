@@ -48,9 +48,6 @@
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto FILTER_SIZE = 3;
 
-// See drain_evals() / resume_evals() for details.
-class NetworkHaltException : public std::exception {};
-
 class Network {
     using ForwardPipeWeights = ForwardPipe::ForwardPipeWeights;
 
@@ -65,9 +62,10 @@ public:
 
     virtual ~Network() = default;
 
-    Netresult get_output(GameState* const state, Ensemble ensemble,
-                         int symmetry = -1, bool read_cache = true,
-                         bool write_cache = true);
+    bool get_output(GameState* const state, Ensemble ensemble,
+                    Network::Netresult& result,
+                    int symmetry = -1, bool read_cache = true,
+                    bool write_cache = true);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -92,9 +90,6 @@ public:
     void nncache_resize(int max_count);
     void nncache_clear();
 
-    // 'Drain' evaluations.  Threads with an evaluation will throw a
-    // NetworkHaltException if possible, or will just proceed and drain ASAP.
-    // New evaluation requests will also result in a NetworkHaltException.
     virtual void drain_evals();
 
     // Flag the network to be open for business.
@@ -104,15 +99,13 @@ public:
         return m_net_type;
     }
 
-    void forward_wait_time_reset() {
-        m_forward->wait_time_reset();
-    }
-
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
 
-    Netresult get_output_internal(const GameState* state, int symmetry);
+    bool get_output_internal(const GameState* state,
+                             int symmetry,
+                             Network::Netresult& result);
     void ladder_update(GameState* const state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,

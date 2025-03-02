@@ -143,6 +143,87 @@ public:
     inline int get_parent_stone(int vertex) const {
         return m_parent[vertex];
     }
+    inline void get_bound_num_liberties_after_play(
+        int vertex,
+        vertex_t pla,
+        int& lowerBound,
+        int& upperBound) const
+    {
+        vertex_t opp = static_cast<vertex_t>((pla) ^ 0x01);
+        int numImmediateLibs = 0;
+        int numCaps = 0;
+        int potentialLibsFromCaps = 0;
+        int numConnectionLibs = 0;
+        int maxConnectionLibs = 0;
+
+        for (auto d = 0; d < 4; d++) {
+            auto n_vtx = get_state_neighbor(vertex, d);
+            if (get_state(n_vtx) == FastBoard::EMPTY) {
+                numImmediateLibs++;
+            } else if (get_state(n_vtx) == opp) {
+                if (get_liberties(n_vtx) == 1) {
+                    numCaps++;
+                    potentialLibsFromCaps += get_string_count(n_vtx);
+                }
+            } else if (get_state(n_vtx) == pla) {
+                int connLibs = get_liberties(n_vtx) - 1;
+                numConnectionLibs += connLibs;
+                if (connLibs > maxConnectionLibs) {
+                    maxConnectionLibs = connLibs;
+                }
+            }
+        }
+        lowerBound = numCaps + 
+            (maxConnectionLibs > numImmediateLibs ? maxConnectionLibs : numImmediateLibs);
+        upperBound = numImmediateLibs + potentialLibsFromCaps + numConnectionLibs;
+    }
+    inline bool would_be_ko_capture(
+        int vertex,
+        vertex_t pla) const
+    {
+        if (get_state(vertex) != FastBoard::EMPTY) {
+            return false;
+        }
+        // Check that surounding points are are all opponent owned and exactly one of them is capturable
+        vertex_t opp = static_cast<vertex_t>((pla) ^ 0x01);
+        int oppCapturableLoc = 0;
+        for (int d = 0; d < 4; d++) {
+            auto n_vtx = get_state_neighbor(vertex, d);
+            if (get_state(n_vtx) != FastBoard::INVAL &&
+                get_state(n_vtx) != opp) {
+                return false;
+            }
+            if (get_state(n_vtx) != opp &&
+                get_liberties(n_vtx) == 1) {
+                return false;
+            }
+            oppCapturableLoc = n_vtx;
+        }
+        if (!oppCapturableLoc) {
+            return false;
+        }
+        // Check that the capturable loc has exactly one stone
+        if (get_string_count(oppCapturableLoc) != 1) {
+            return false;
+        }
+        return true;
+    }
+    inline bool has_liberty_gaining_captures(int vertex) const
+    {
+        vertex_t opp = static_cast<vertex_t>(get_state(vertex) ^ 0x01);
+        auto newpos = vertex;
+        do {
+            for (int d = 0; d < 4; d++) {
+                auto n_vtx = get_state_neighbor(newpos, d);
+                if (get_state(n_vtx) == opp &&
+                    get_liberties(n_vtx) == 1) {
+                    return true;
+                }
+            }
+            newpos = get_next_stone(newpos);
+        } while (newpos != vertex);
+        return false;
+    }
 
 protected:
     /*
