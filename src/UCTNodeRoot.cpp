@@ -253,7 +253,6 @@ UCTNode* UCTNode::get_noladder_child(GameState& state) {
         return m_children.front().get();
     }
 
-/**/
     UCTNode* front_child = m_children.front().get();
     if (front_child->m_move == FastBoard::PASS) {
         return front_child;
@@ -265,5 +264,4 @@ UCTNode* UCTNode::get_noladder_child(GameState& state) {
         }
     }
     return front_child;
-/**/
 }
