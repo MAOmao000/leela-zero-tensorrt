@@ -71,12 +71,12 @@ public:
 
     virtual ~ForwardPipe() = default;
 
-    virtual void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") = 0;
+    virtual void initialize(const NetworkType net_type, const std::string &model_hash = "") = 0;
 
     virtual bool needs_autodetect() {
         return false;
     };
-    virtual void forward(const std::vector<float>& input,
+    virtual bool forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val) = 0;
     virtual void push_weights(
@@ -87,7 +87,6 @@ public:
 
     virtual void drain() {}
     virtual void resume() {}
-    virtual void wait_time_reset() {}
 };
 
 #endif

@@ -81,12 +81,9 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     }
 
     NNCache::Netresult raw_netlist;
-    try {
-        raw_netlist =
-            network.get_output(&state, Network::Ensemble::RANDOM_SYMMETRY);
-    } catch (NetworkHaltException&) {
-        expand_cancel();
-        throw;
+    if (!network.get_output(
+        &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist)) {
+        return false;
     }
 
     // DCNN returns winrate as side to move
@@ -107,8 +104,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex)
-            && raw_netlist.policy[i] >= 0.0f) {
+        if (state.is_move_legal(to_move, vertex)) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
@@ -191,6 +187,7 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
             ++nodecount;
         }
     }
+
     m_min_psa_ratio_children = skipped_children ? min_psa_ratio : 0.0f;
 }
 

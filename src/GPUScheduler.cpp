@@ -59,7 +59,6 @@ GPUScheduler<net_t>::GPUScheduler()
 
 template <typename net_t>
 void GPUScheduler<net_t>::initialize(
-    const int channels,
     const NetworkType net_type,
     const std::string &model_hash)
 {
@@ -305,7 +304,7 @@ void GPUScheduler<net_t>::push_weights(
 }
 
 template <typename net_t>
-void GPUScheduler<net_t>::forward(
+bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val)
@@ -316,16 +315,14 @@ void GPUScheduler<net_t>::forward(
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
-        if (m_single_eval_in_progress.load()) {
-            m_waittime += 2;
-        }
     }
     m_cv.notify_one();
     entry->cv.wait(lk);
 
     if (cfg_use_drain_resume && m_draining) {
-        throw NetworkHaltException();
+        return false;
     }
+    return true;
 }
 
 template <typename net_t>
@@ -336,21 +333,17 @@ void GPUScheduler<net_t>::batch_worker(
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
     // batch scheduling heuristic.
     // Returns the batch picked up from the queue (m_forward_queue)
-    // 1) Wait for m_waittime milliseconds for full batch
-    // 2) if we don't have a full batch then just do a single eval
+    // 1) Wait for cfg_batch_wait_time milliseconds for full batch
+    // 2) If a complete batch is not available, evaluate a portion on dummy data
     //
-    // The purpose of m_waittime is to prevent the system from deadlocking
+    // The purpose of cfg_batch_wait_time is to prevent the system from deadlocking
     // because we were waiting for a job too long, while the job is never
     // going to come due to a control dependency (e.g., evals stuck on a
     // critical path).  To do so:
     //
-    // 1) if we couldn't form a batch after waiting m_waittime ms, it means
-    // that we hit the critical path and should do scalar evals.
-    // Wait 1ms shorter next time.
-    //
-    // 2) if we picked up a single eval, but were getting additional evals
-    // while that single eval was being processed, it means that we made
-    // the wrong decision.  Wait 2ms longer next time.
+    // 1) If no batch can be formed after waiting m_waittime milliseconds,
+    // it means we have reached the critical path
+    // and need to perform the evaluation with less data.
     auto pickup_task = [this]() {
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
         size_t count = 0;
@@ -365,21 +358,14 @@ void GPUScheduler<net_t>::batch_worker(
                 break;
             }
             bool timeout = !m_cv.wait_for(
-                lk, std::chrono::milliseconds(m_waittime), [this]() {
+                lk, std::chrono::milliseconds(cfg_batch_wait_time), [this]() {
                     return !m_running
                            || m_forward_queue.size() >= cfg_batch_size;
                 }
             );
             if (!m_forward_queue.empty()) {
-                if (timeout
-                    && m_single_eval_in_progress.exchange(true) == false) {
-                    count = m_forward_queue.size();
-                    // Waited long enough but couldn't form a batch.
-                    // Check if there is any other single eval in progress,
-                    // and if not, do one from this thread.
-                    if (m_waittime > static_cast<int>(count)) {
-                        m_waittime -= static_cast<int>(count);
-                    }
+                if (timeout) {
+                    count = std::min(cfg_batch_size, m_forward_queue.size());
                     break;
                 }
             }
@@ -396,7 +382,6 @@ void GPUScheduler<net_t>::batch_worker(
     auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
     while (true) {
         auto inputs = pickup_task();
-        auto count = inputs.size();
         if (!m_running) {
             return;
         }
@@ -410,14 +395,16 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
-        // run the NN evaluation
-        m_backend[gnum]->forward(
-            batch_input,
-            batch_output_pol,
-            batch_output_val,
-            static_cast<int>(tid),
-            cfg_batch_size
-        );
+        if (!cfg_use_drain_resume || !m_draining) {
+            // run the NN evaluation
+            m_backend[gnum]->forward(
+                batch_input,
+                batch_output_pol,
+                batch_output_val,
+                static_cast<int>(tid),
+                cfg_batch_size
+            );
+        }
         // Get output and copy back
         index = 0;
         for (auto& x : inputs) {
@@ -434,35 +421,14 @@ void GPUScheduler<net_t>::batch_worker(
             x->cv.notify_all();
             index++;
         }
-        if (count < cfg_batch_size) {
-            m_single_eval_in_progress.exchange(false);
-        }
     }
 }
 
 template <typename net_t>
 void GPUScheduler<net_t>::drain()
 {
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
-    m_draining = true;
-    std::list<std::shared_ptr<ForwardQueueEntry>> fq;
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        std::move(
-            m_forward_queue.begin(),
-            m_forward_queue.end(),
-            std::back_inserter(fq)
-        );
-        m_forward_queue.clear();
-    }
-    for (auto& x : fq) {
-        {
-            // dummy lock/unlock to make sure thread in forward() is sleeping
-            std::unique_lock<std::mutex> lk(x->mutex);
-        }
-        x->cv.notify_all();
+    if (cfg_use_drain_resume) {
+        m_draining = true;
     }
 }
 
@@ -470,8 +436,9 @@ template <typename net_t>
 void GPUScheduler<net_t>::resume()
 {
     // UCTNode::think() should wait for all child threads to complete before resuming.
-    assert(m_forward_queue.empty());
-    m_draining = false;
+    if (cfg_use_drain_resume) {
+        m_draining = false;
+    }
 }
 
 template class GPUScheduler<float>;

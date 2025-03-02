@@ -223,17 +223,15 @@ float UCTSearch::get_min_psa_ratio() const {
 
 SearchResult UCTSearch::play_simulation(GameState& currstate,
                                         UCTNode* const node) {
-    const auto color = currstate.get_to_move();
     auto result = SearchResult{};
-    if (!is_running()) return result;
+    if (!is_running()) {
+        return result;
+    }
+
+    const auto color = currstate.get_to_move();
     auto new_node = false;
 
     node->virtual_loss();
-
-    // This will undo virtual loss even if something throws an exception.
-    BOOST_SCOPE_EXIT(node) {
-        node->virtual_loss_undo();
-    } BOOST_SCOPE_EXIT_END
 
     if (node->expandable()) {
         if (currstate.get_passes() >= 2) {
@@ -242,18 +240,11 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
         } else {
             float eval;
             const auto had_children = node->has_children();
-
-            // Careful: create_children() can throw a NetworkHaltException when
-            // another thread requests draining the search.
-            try {
-                const auto success = node->create_children(
-                    m_network, m_nodes, currstate, eval, get_min_psa_ratio());
-                if (!had_children && success) {
-                    result = SearchResult::from_eval(eval);
-                    new_node = true;
-                }
-            } catch (NetworkHaltException&) {
-                return result;
+            const auto success = node->create_children(
+                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
+            if (!had_children && success) {
+                result = SearchResult::from_eval(eval);
+                new_node = true;
             }
         }
     }
@@ -274,6 +265,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     if (result.valid() && !new_node) {
         node->update(result.eval());
     }
+    node->virtual_loss_undo();
 
     return result;
 }
@@ -741,17 +733,13 @@ bool UCTSearch::stop_thinking(const int elapsed_centis,
 }
 
 void UCTWorker::operator()() {
-    try {
-        do {
-            auto currstate = std::make_unique<GameState>(m_rootstate);
-            auto result = m_search->play_simulation(*currstate, m_root);
-            if (result.valid()) {
-                m_search->increment_playouts();
-            }
-        } while (m_search->is_running());
-    } catch (NetworkHaltException&) {
-        // intentionally empty
-    }
+    do {
+        auto currstate = std::make_unique<GameState>(m_rootstate);
+        auto result = m_search->play_simulation(*currstate, m_root);
+        if (result.valid()) {
+            m_search->increment_playouts();
+        }
+    } while (m_search->is_running());
 }
 
 void UCTSearch::increment_playouts() {
@@ -789,7 +777,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     auto last_update = 0;
     auto last_output = 0;
     do {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
         Time elapsed;
         int elapsed_centis = Time::timediff_centis(start, elapsed);
@@ -819,13 +807,9 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     // Stop the search.
     m_run = false;
-    if (cfg_use_drain_resume) {
-        m_network.drain_evals();
-        tg.wait_all();
-        m_network.resume_evals();
-    } else {
-        tg.wait_all();
-    }
+    m_network.drain_evals();
+    tg.wait_all();
+    m_network.resume_evals();
 
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
@@ -888,7 +872,7 @@ void UCTSearch::ponder() {
     auto keeprunning = true;
     auto last_output = 0;
     do {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         if (cfg_analyze_tags.interval_centis()) {
             Time elapsed;
             int elapsed_centis = Time::timediff_centis(start, elapsed);
@@ -909,13 +893,9 @@ void UCTSearch::ponder() {
 
     // Stop the search.
     m_run = false;
-    if (cfg_use_drain_resume) {
-        m_network.drain_evals();
-        tg.wait_all();
-        m_network.resume_evals();
-    } else {
-        tg.wait_all();
-    }
+    m_network.drain_evals();
+    tg.wait_all();
+    m_network.resume_evals();
 
     // Display search info.
     myprintf("\n");
