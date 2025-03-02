@@ -256,7 +256,7 @@
       </EnableCOMDATFolding>
       <OptimizeReferences>
       </OptimizeReferences>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\lib\TensorRT-10.0.0.6\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\nvidia\lib\x64;C:\lib\vcpkg\installed\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>
