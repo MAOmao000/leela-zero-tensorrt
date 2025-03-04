@@ -78,10 +78,6 @@ void Network::benchmark(GameState* const state, const int iterations) {
     Netresult result;
 
     for (auto i = size_t{0}; i < cpus; i++) {
-//        tg.add_task([this, &runcount, iterations, state]() {
-//            while (runcount < iterations) {
-//                runcount++;
-//                get_output(state, Ensemble::RANDOM_SYMMETRY, -1, false);
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
@@ -613,15 +609,7 @@ void Network::ladder_update(
                 result.winrate = std::max(0.001f, result.winrate);
             }
             result.policy[i] *= 0.0001f;
-        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense * 3) {
-            if (cfg_ladder_penalty_winrate > 0.0f) {
-                result.winrate -=
-                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
-                result.winrate = std::max(0.001f, result.winrate);
-            }
-            result.policy[i] *= 0.0001f;
         } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
-//            result.policy[i] = policy[ladder_check_nodes];
             result.policy[i] *= 0.0001f;
         }
     }
@@ -633,7 +621,6 @@ bool Network::get_output(
     const int symmetry,
     const bool read_cache, const bool write_cache) {
     if (state->board.get_boardsize() != BOARD_SIZE) {
-//        return result;
         return false;
     }
 

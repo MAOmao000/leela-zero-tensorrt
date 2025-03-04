@@ -110,7 +110,7 @@ static bool LadderExploration(
                         if (!breath_checked[capture_liberty_pos[0]]) {
                             breath_checked[capture_liberty_pos[0]] = CHECKED;
                             if (state->is_move_legal(pla, capture_liberty_pos[0])) {
-                                if (start + moveListLen >= buf.size()) {
+                                if (static_cast<size_t>(start + moveListLen) >= buf.size()) {
                                     stackIdx--;
                                     while (stackIdx >= 0) {
                                         state->undo_move();
@@ -129,7 +129,7 @@ static bool LadderExploration(
                 // Check for escape routes.
                 auto escape_liberty_pos = state->board.get_liberty_pos(1, str_vtx);
                 if (!breath_checked[escape_liberty_pos[0]]) {
-                    if (start + moveListLen >= buf.size()) {
+                    if (static_cast<size_t>(start + moveListLen) >= buf.size()) {
                         stackIdx--;
                         while (stackIdx >= 0) {
                             state->undo_move();
@@ -167,7 +167,7 @@ static bool LadderExploration(
                 // Chaser check
                 moveListLen = 2;
                 auto chase_liberty_pos = state->board.get_liberty_pos(2, str_vtx);
-                if (start + moveListLen >= buf.size()) {
+                if (static_cast<size_t>(start + moveListLen) >= buf.size()) {
                     stackIdx--;
                     while (stackIdx >= 0) {
                         state->undo_move();
@@ -359,15 +359,22 @@ void LadderDetection(
                 if (state->is_move_legal(opponent_color, liberty_pos[0])) {
                     auto state_copy = std::make_unique<GameState>(state);
                     state_copy->play_move(opponent_color, liberty_pos[0]);
-const Time start;
+#ifndef NDEBUG
+                    const Time start;
+#endif
                     move0Works = LadderExploration(state_copy, vertex, depth0);
-const Time end;
-const auto elapsed = Time::timediff_seconds(start, end);
-if (elapsed > 0.1) {
-auto turn_vertex = state->move_to_text(vertex);
-myprintf_error("LadderDetection escape check1 time over:%f seconds turn pos:%s depth:%d\n",
-elapsed, turn_vertex.c_str(), depth0);
-std::exit(1); }
+#ifndef NDEBUG
+                    const Time end;
+                    const auto elapsed = Time::timediff_seconds(start, end);
+                    if (elapsed > 0.1) {
+                        auto turn_vertex = state->move_to_text(vertex);
+                        myprintf_error(
+                            "LadderDetection escape check1 time over:%f"
+                            " seconds turn pos:%s depth:%d\n",
+                            elapsed, turn_vertex.c_str(), depth0);
+                        std::exit(1);
+                    }
+#endif
                     if (move0Works == DEAD) {
                         ladder_pos[i] = depth0;
                     }
@@ -375,15 +382,22 @@ std::exit(1); }
                 if (state->is_move_legal(opponent_color, liberty_pos[1])) {
                     auto state_copy = std::make_unique<GameState>(state);
                     state_copy->play_move(opponent_color, liberty_pos[1]);
-const Time start;
+#ifndef NDEBUG
+                    const Time start;
+#endif
                     move1Works = LadderExploration(state_copy, vertex, depth1);
-const Time end;
-const auto elapsed = Time::timediff_seconds(start, end);
-if (elapsed > 0.1) {
-auto turn_vertex = state->move_to_text(vertex);
-myprintf_error("LadderDetection escape check2 time over:%f seconds turn pos:%s depth:%d\n",
-elapsed, turn_vertex.c_str(), depth1);
-std::exit(1); }
+#ifndef NDEBUG
+                    const Time end;
+                    const auto elapsed = Time::timediff_seconds(start, end);
+                    if (elapsed > 0.1) {
+                        auto turn_vertex = state->move_to_text(vertex);
+                        myprintf_error(
+                            "LadderDetection escape check2 time over:%f"
+                            " seconds turn pos:%s depth:%d\n",
+                            elapsed, turn_vertex.c_str(), depth1);
+                        std::exit(1);
+                    }
+#endif
                     if (move1Works == DEAD) {
                         ladder_pos[i] = std::min(static_cast<char>(depth1), ladder_pos[i]);
                     }
@@ -420,15 +434,22 @@ std::exit(1); }
             && state->board.get_string_count(str_vtx) >= cfg_offense_stones) {
             int depth = 0;
             auto state_copy = std::make_unique<GameState>(state);
-const Time start;
+#ifndef NDEBUG
+            const Time start;
+#endif
             bool laddered = LadderExploration(state_copy, str_vtx, depth);
-const Time end;
-const auto elapsed = Time::timediff_seconds(start, end);
-if (elapsed > 0.1) {
-auto turn_vertex = state->move_to_text(vertex);
-myprintf_error("LadderDetection chase check time over:%f seconds turn pos:%s depth:%d\n",
-elapsed, turn_vertex.c_str(), depth);
-std::exit(1); }
+#ifndef NDEBUG
+            const Time end;
+            const auto elapsed = Time::timediff_seconds(start, end);
+            if (elapsed > 0.1) {
+                auto turn_vertex = state->move_to_text(vertex);
+                myprintf_error(
+                    "LadderDetection chase check time over:%f"
+                    " seconds turn pos:%s depth:%d\n",
+                    elapsed, turn_vertex.c_str(), depth);
+                std::exit(1);
+            }
+#endif
             if (laddered == ALIVE) {
                 ladder_pos[i] = -depth;
             }
@@ -442,11 +463,7 @@ bool IsLadderRoot(
     const int &move_vertex
     )
 {
-    if (cfg_ladder_chase == chase_t::EVERY
-        || cfg_ladder_offense < 1
-        || state->get_movenum() < NUM_INTERSECTIONS / 10
-        || state->get_movenum() > NUM_INTERSECTIONS / 2
-        ) {
+    if (cfg_ladder_chase == chase_t::EVERY || cfg_ladder_offense < 1) {
         return false;
     }
     const auto turn_color = state->board.get_to_move();
