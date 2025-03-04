@@ -39,6 +39,7 @@
 #include <limits>
 #include <memory>
 #include <type_traits>
+#include <stack>
 
 #include "UCTSearch.h"
 
@@ -223,50 +224,59 @@ float UCTSearch::get_min_psa_ratio() const {
 
 SearchResult UCTSearch::play_simulation(GameState& currstate,
                                         UCTNode* const node) {
+    auto currnode = node;
+    std::stack<UCTNode*> node_stack;
+    std::stack<bool> new_stack;
     auto result = SearchResult{};
-    if (!is_running()) {
-        return result;
-    }
+    bool new_node;
 
-    const auto color = currstate.get_to_move();
-    auto new_node = false;
-
-    node->virtual_loss();
-
-    if (node->expandable()) {
-        if (currstate.get_passes() >= 2) {
-            auto score = currstate.final_score();
-            result = SearchResult::from_score(score);
-        } else {
-            float eval;
-            const auto had_children = node->has_children();
-            const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
-            if (!had_children && success) {
-                result = SearchResult::from_eval(eval);
-                new_node = true;
+    while (is_running()) {
+        const auto color = currstate.get_to_move();
+        new_node = false;
+        currnode->virtual_loss();
+        if (currnode->expandable()) {
+            if (currstate.get_passes() >= 2) {
+                auto score = currstate.final_score();
+                result = SearchResult::from_score(score);
+            } else {
+                float eval;
+                const auto had_children = currnode->has_children();
+                const auto success = currnode->create_children(
+                    m_network, m_nodes, currstate, eval, get_min_psa_ratio());
+                if (!had_children && success) {
+                    result = SearchResult::from_eval(eval);
+                    new_node = true;
+                }
             }
         }
-    }
-
-    if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(currstate, color, node == m_root.get());
-        auto move = next->get_move();
-
-        currstate.play_move(move);
-        if (move != FastBoard::PASS && currstate.superko()) {
-            next->invalidate();
-        } else {
-            result = play_simulation(currstate, next);
+        if (currnode->has_children() && !result.valid()) {
+            auto next = currnode->uct_select_child(currstate, color, currnode == m_root.get());
+            auto move = next->get_move();
+            currstate.play_move(move);
+            if (move != FastBoard::PASS && currstate.superko()) {
+                next->invalidate();
+            } else {
+                node_stack.push(currnode);
+                new_stack.push(new_node);
+                currnode = next;
+                continue;
+            }
         }
+        node_stack.push(currnode);
+        new_stack.push(new_node);
+        break;
     }
-
     // New node was updated in create_children.
-    if (result.valid() && !new_node) {
-        node->update(result.eval());
+    while (!node_stack.empty()) {
+        currnode = node_stack.top();
+        new_node = new_stack.top();
+        if (result.valid() && !new_node) {
+            currnode->update(result.eval());
+        }
+        currnode->virtual_loss_undo();
+        node_stack.pop();
+        new_stack.pop();
     }
-    node->virtual_loss_undo();
-
     return result;
 }
 
@@ -422,7 +432,6 @@ bool UCTSearch::should_resign(const passflag_t passflag, const float besteval) {
 
     const auto is_default_cfg_resign = cfg_resignpct < 0;
     const auto resign_threshold =
-//        0.01f * (is_default_cfg_resign ? 10 : cfg_resignpct);
         0.01f * (is_default_cfg_resign ? 5 : cfg_resignpct);
     if (besteval > resign_threshold) {
         // eval > cfg_resign
@@ -586,31 +595,24 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
     return bestmove;
 }
 
-std::string UCTSearch::get_pv(FastState& state, const UCTNode& parent) {
-    if (!parent.has_children()) {
-        return std::string();
-    }
-
-    if (parent.expandable()) {
-        // Not fully expanded. This means someone could expand
-        // the node while we want to traverse the children.
-        // Avoid the race conditions and don't go through the rabbit hole
-        // of trying to print things from this node.
-        return std::string();
-    }
-
-    auto& best_child = parent.get_best_root_child(state.get_to_move());
-    if (best_child.first_visit()) {
-        return std::string();
-    }
-    auto best_move = best_child.get_move();
-    auto res = state.move_to_text(best_move);
-
-    state.play_move(best_move);
-
-    auto next = get_pv(state, best_child);
-    if (!next.empty()) {
-        res.append(" ").append(next);
+std::string UCTSearch::get_pv(FastState& state, UCTNode& parent) {
+    UCTNode* temp = &parent;
+    std::string res = std::string();
+    while (true) {
+        if (!temp->has_children() || temp->expandable()) {
+            return res;
+        }
+        auto& best_child = temp->get_best_root_child(state.get_to_move());
+        if (best_child.first_visit()) {
+            return res;
+        }
+        auto best_move = best_child.get_move();
+        if (res.size() > 0) {
+            res.append(" ").append(state.move_to_text(best_move));
+        } else {
+            res.append(state.move_to_text(best_move));
+        }
+        temp = &best_child;
     }
     return res;
 }
