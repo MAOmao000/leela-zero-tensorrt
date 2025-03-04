@@ -1,11 +1,22 @@
 # Leela Zero with ladder protection and TensorRT backend
-This is the new Leela Zero with ladder protection and TensorRT backend forking Leela Zero.
-It also supports MiniGo v17 converted weights.
-It doesn't work with backends other than TensorRT.
-Below is the readme for the original Leela Zero.
+This is the new Leela Zero with ladder protection and TensorRT backend, a fork of Leela Zero.
+The following fixes have been made to the Leela Zero next branch.
+- The system detects the ladder that cannot be escaped as much as possible, and in that case, it does not take any action to escape.
+- The move that mistakes an enemy's stone for a ladder and continues to chase after it is detected and avoided as much as possible.
+- The ladder detection logic was taken from KataGo's board.cpp, see https://github.com/lightvector/KataGo.
+- Neural network inference is performed using TensorRT.
+- The neural network inference process is based on KataGo's trtbackend.cpp, sha2.cpp and sha2.h. See https://github.com/lightvector/KataGo.
+- Supports converted weights for Leela Zero in MiniGo v17 using Squeeze-and-Excitation Networks.
+- Converted recursive logic to non-recursive logic.
+- The threshold for the win rate for the default surrender condition was changed from 10% to 5%.
+- The default batch size was changed from 1/2 the number of search threads to the same number of search threads.
+- The number of sentinels on the board was reduced by one vertical column.
+- ISO C++ 17 standard is now supported.
 
-[![Linux Build Status](https://travis-ci.org/leela-zero/leela-zero.svg?branch=next)](https://travis-ci.org/leela-zero/leela-zero)
-[![Windows Build Status](https://ci.appveyor.com/api/projects/status/dcvp31x1e0yavrtf/branch/next?svg=true)](https://ci.appveyor.com/project/gcp/leela-zero-8arv1/branch/next)
+Notes:.
+- This program will only work on machines with NVIDIA GPUs.
+
+Below is the original Leela Zero readme.
 
 # What
 
