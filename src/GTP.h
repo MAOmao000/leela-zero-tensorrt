@@ -182,8 +182,6 @@ extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
-extern int cfg_ladder_depth_defense;
-extern int cfg_ladder_depth_offense;
 extern int cfg_ladder_check_nodes;
 extern float cfg_ladder_penalty_winrate;
 extern float cfg_chase_penalty_policy;

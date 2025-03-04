@@ -183,10 +183,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder defense check minimum stones.")
         ("offense_stones", po::value<int>()->default_value(cfg_offense_stones),
                       "Ladder offense check minimum stones.")
-        ("ladder_depth_defense", po::value<int>()->default_value(cfg_ladder_depth_defense),
-                      "Ladder defense check maximum depth.")
-        ("ladder_depth_offense", po::value<int>()->default_value(cfg_ladder_depth_offense),
-                      "Ladder offense check maximum depth.")
         ("ladder_check_nodes", po::value<int>()->default_value(cfg_ladder_check_nodes),
                       "Number of nodes to check ladder.")
         ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
@@ -534,14 +530,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("offense_stones")) {
         cfg_offense_stones = vm["offense_stones"].as<int>();
-    }
-
-    if (vm.count("ladder_depth_defense")) {
-        cfg_ladder_depth_defense = vm["ladder_depth_defense"].as<int>();
-    }
-
-    if (vm.count("ladder_depth_offense")) {
-        cfg_ladder_depth_offense = vm["ladder_depth_offense"].as<int>();
     }
 
     if (vm.count("ladder_check_nodes")) {

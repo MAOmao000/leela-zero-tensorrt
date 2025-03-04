@@ -109,8 +109,6 @@ int cfg_ladder_defense;
 int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
-int cfg_ladder_depth_defense;
-int cfg_ladder_depth_offense;
 int cfg_ladder_check_nodes;
 float cfg_ladder_penalty_winrate;
 float cfg_chase_penalty_policy;
@@ -386,12 +384,10 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
     cfg_ladder_chase = chase_t::EVERY; // --ladder_chase
-    cfg_ladder_defense = 1;            // --ladder_defense
+    cfg_ladder_defense = 3;            // --ladder_defense
     cfg_ladder_offense = 12;           // --ladder_offense
     cfg_defense_stones = 4;            // --defense_stones
-    cfg_offense_stones = 4;            // --offense_stones
-    cfg_ladder_depth_defense = 100;    // --ladder_depth_defense
-    cfg_ladder_depth_offense = 100;    // --ladder_depth_offense
+    cfg_offense_stones = 5;            // --offense_stones
     cfg_ladder_check_nodes = 10;       // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f; // --ladder_penalty_winrate
     cfg_chase_penalty_policy = 0.001f; // --chase_penalty_policy
@@ -892,22 +888,18 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-//            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
             s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
                                   Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-//                vec = s_network->get_output(&game, Network::Ensemble::DIRECT, s,
                 s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
                                       false);
                 Network::show_heatmap(&game, vec, false);
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-//            vec = s_network->get_output(&game, Network::Ensemble::AVERAGE, -1,
             s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
                                   false);
         } else {
-//            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
             s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
                                   std::stoi(symmetry), false);
         }
@@ -1281,9 +1273,7 @@ std::pair<bool, std::string> GTP::set_max_memory(
 
     assert(cache_size_ratio_percent >= 1);
     assert(cache_size_ratio_percent <= 99);
-//    auto max_cache_size =
-//        max_memory_for_search * cache_size_ratio_percent / 100;
-// for 32bit os
+    // for 32bit os
     auto max_cache_size = max_memory_for_search / 100 * cache_size_ratio_percent;
 
     auto max_cache_count =
