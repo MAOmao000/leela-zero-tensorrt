@@ -582,7 +582,7 @@ bool Network::probe_cache(const GameState* const state,
 void Network::ladder_update(
     GameState* const state, Network::Netresult& result) {
 
-    char ladder_map[NUM_INTERSECTIONS] = {};
+    int ladder_map[NUM_INTERSECTIONS] = {};
     std::array<float, NUM_INTERSECTIONS> policy = result.policy;
     auto ladder_check_nodes = cfg_ladder_check_nodes;
     std::stable_sort(rbegin(policy), rend(policy));
@@ -600,9 +600,11 @@ void Network::ladder_update(
         std::max(ladder_check_nodes, 1));
 
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (std::abs(ladder_map[i]) == 255) {
-            result.policy[i] *= 0.5f;
-        } else if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
+        if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
+#ifndef NDEBUG
+            myprintf_error("escape depth:%d()\n",
+                ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
+#endif
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
@@ -610,6 +612,10 @@ void Network::ladder_update(
             }
             result.policy[i] *= 0.0001f;
         } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
+#ifndef NDEBUG
+            myprintf_error("chase depth:%d()\n",
+                ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
+#endif
             result.policy[i] *= 0.0001f;
         }
     }

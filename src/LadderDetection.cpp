@@ -90,8 +90,8 @@ static bool LadderExploration(
             int moveListLen = 0;
             if (isDefender) {
                 // Check if can capture the stone of the surrounding opponent.
-                unsigned char capture_checked[FastBoard::NUM_VERTICES] = {};
-                unsigned char breath_checked[FastBoard::NUM_VERTICES] = {};
+                int capture_checked[FastBoard::NUM_VERTICES] = {};
+                int breath_checked[FastBoard::NUM_VERTICES] = {};
                 auto newpos = str_vtx;
                 auto n_vtx = 0;
                 do {
@@ -318,7 +318,7 @@ static bool LadderExploration(
 
 void LadderDetection(
     GameState* const state,
-    char* const ladder_pos,
+    int* const ladder_pos,
     const std::array<float, NUM_INTERSECTIONS> &policy,
     const float &ladder_min_policy,
     const int &check_nodes
@@ -399,7 +399,7 @@ void LadderDetection(
                     }
 #endif
                     if (move1Works == DEAD) {
-                        ladder_pos[i] = std::min(static_cast<char>(depth1), ladder_pos[i]);
+                        ladder_pos[i] = std::min(depth1, ladder_pos[i]);
                     }
                 }
             }
@@ -412,7 +412,7 @@ void LadderDetection(
 
         auto str_vtx = -1;
         auto liberty_vtx = -1;
-        char ladder_checked[FastBoard::NUM_VERTICES] = {};
+        int ladder_checked[FastBoard::NUM_VERTICES] = {};
         for (auto d = 0; d < 4; d++) {
             auto n_vtx = state->board.get_state_neighbor(vertex, d);
             if (state->board.get_state(n_vtx) == opponent_color
@@ -473,7 +473,7 @@ bool IsLadderRoot(
 
     auto str_vtx = -1;
     auto liberty_vtx = -1;
-    char ladder_checked[FastBoard::NUM_VERTICES] = {};
+    int ladder_checked[FastBoard::NUM_VERTICES] = {};
     for (auto d = 0; d < 4; d++) {
         auto n_vtx = state->board.get_state_neighbor(move_vertex, d);
         if (state->board.get_state(n_vtx) == opponent_color

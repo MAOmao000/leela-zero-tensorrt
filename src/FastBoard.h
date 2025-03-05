@@ -113,7 +113,7 @@ public:
         auto newpos = vertex;
         auto liberty_cnt = 0;
         std::array<int, 2> liberty_pos = {0, 0};
-        char breath_checked[FastBoard::NUM_VERTICES] = {};
+        int breath_checked[FastBoard::NUM_VERTICES] = {};
         // Follow the connecting stones and find the breathing point.
         do {
             for (auto d = 0; d < 4; d++) {
