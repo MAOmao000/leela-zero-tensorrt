@@ -176,7 +176,7 @@ UCTNode* UCTNode::get_nopass_child(GameState& state) {
                we require it because we're overruling its moves. */
             if (child->m_move != FastBoard::PASS
                 && !state.board.is_eye(state.get_to_move(), child->m_move)
-                && !IsLadderRoot(&state, child->m_move)) {
+                && IsLadderChase(&state, child->m_move) < cfg_ladder_offense) {
                 return child.get();
             }
         }
@@ -259,7 +259,7 @@ UCTNode* UCTNode::get_noladder_child(GameState& state) {
     }
     for (const auto& child : m_children) {
         if (child->m_move == FastBoard::PASS ||
-            !IsLadderRoot(&state, child->m_move)) {
+            IsLadderChase(&state, child->m_move) < cfg_ladder_offense) {
             return child.get();
         }
     }
