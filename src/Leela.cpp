@@ -110,10 +110,11 @@ static void calculate_thread_count_gpu(
                 (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
+            if (cfg_batch_size > cfg_num_threads) {
+                cfg_batch_size = std::min(cfg_num_threads / 2, size_t{1});
+            }
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
-            } else if (cfg_batch_size > cfg_num_threads) {
-                	cfg_batch_size = std::min(cfg_num_threads / 2, size_t{1});
             }
         }
     } else {
@@ -121,7 +122,12 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            cfg_batch_size = cfg_num_threads * 5 / 6;
+            if (cfg_max_threads < 4) {
+                cfg_batch_size = 1;
+            } else {
+                cfg_batch_size = cfg_num_threads * (cfg_max_threads / 2 - 1) / (cfg_max_threads / 2);
+            }
+
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
@@ -173,8 +179,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "-m0 -t1 -s1.")
         ("trt-cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
-        ("ladder_chase", po::value<std::string>()->default_value("every"),
-                      "Ladder chase check timing. (every/root/playout)")
+        ("ladder_chase", po::value<std::string>()->default_value("root"),
+                      "Ladder chase check timing. (every/root)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -187,10 +193,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Number of nodes to check ladder.")
         ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
                       "The rate at which the ladder reduces the winning rate of the board.")
-        ("chase_penalty_policy", po::value<float>()->default_value(cfg_chase_penalty_policy),
-                      "The rate at which to reduce the policy if the ladder is tracked incorrectly.")
-        ("chase_penalty_value", po::value<double>()->default_value(cfg_chase_penalty_value),
-                      "The rate at which to reduce the value if the ladder is tracked incorrectly.")
+        ("ladder_min_policy", po::value<float>(),
+                      "Minimal policy that does ladder detect checking.")
       ;
     po::options_description gpu_desc("TensorRT device options");
     gpu_desc.add_options()
@@ -508,8 +512,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             cfg_ladder_chase = chase_t::EVERY;
         } else if (ladder_chase == "root") {
             cfg_ladder_chase = chase_t::ROOT;
-        } else if (ladder_chase == "playout") {
-            cfg_ladder_chase = chase_t::PLAYOUT;
         } else {
             printf("Invalid ladder_chase value.\n");
             exit(EXIT_FAILURE);
@@ -540,12 +542,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
     }
 
-    if (vm.count("chase_penalty_policy")) {
-        cfg_chase_penalty_policy = vm["chase_penalty_policy"].as<float>();
-    }
-
-    if (vm.count("chase_penalty_value")) {
-        cfg_chase_penalty_value = vm["chase_penalty_value"].as<double>();
+    if (vm.count("ladder_min_policy")) {
+        cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
     }
 
     auto out = std::stringstream{};

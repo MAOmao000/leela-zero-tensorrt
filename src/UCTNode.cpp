@@ -40,7 +40,6 @@
 #include <numeric>
 #include <utility>
 #include <vector>
-#include <boost/stacktrace.hpp>
 
 #include "UCTNode.h"
 
@@ -50,7 +49,6 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
-#include "LadderDetection.h"
 
 using namespace Utils;
 
@@ -364,17 +362,6 @@ UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
-        if (cfg_ladder_chase == chase_t::PLAYOUT) {
-            const auto move = child.get_move();
-            if (state.m_komove == FastBoard::NO_VERTEX && move != FastBoard::PASS) {
-                if (IsLadderRoot(&state, move)) {
-                    if (child.is_inflated()) {
-                        child.get()->set_policy(psa * cfg_chase_penalty_policy);
-                    }
-                    value *= cfg_chase_penalty_value;
-                }
-            }
-        }
         if (value > best_value) {
             best_value = value;
             best = &child;
