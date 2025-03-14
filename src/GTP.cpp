@@ -54,6 +54,8 @@
 #include "Training.h"
 #include "UCTSearch.h"
 #include "Utils.h"
+#include "Random.h"
+#include "Zobrist.h"
 
 using namespace Utils;
 
@@ -111,8 +113,7 @@ int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_check_nodes;
 float cfg_ladder_penalty_winrate;
-float cfg_chase_penalty_policy;
-double cfg_chase_penalty_value;
+float cfg_ladder_min_policy;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -358,7 +359,7 @@ void GTP::setup_default_parameters() {
 
     cfg_precision = precision_t::AUTO;   // --precision
 
-    cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
+    cfg_puct = 0.9f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
@@ -383,15 +384,14 @@ void GTP::setup_default_parameters() {
 
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_chase = chase_t::EVERY; // --ladder_chase
-    cfg_ladder_defense = 3;            // --ladder_defense
+    cfg_ladder_chase = chase_t::ROOT;  // --ladder_chase
+    cfg_ladder_defense = 6;            // --ladder_defense
     cfg_ladder_offense = 12;           // --ladder_offense
-    cfg_defense_stones = 4;            // --defense_stones
-    cfg_offense_stones = 5;            // --offense_stones
-    cfg_ladder_check_nodes = 10;       // --ladder_check_nodes
+    cfg_defense_stones = 1;            // --defense_stones
+    cfg_offense_stones = 3;            // --offense_stones
+    cfg_ladder_check_nodes = 15;       // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f; // --ladder_penalty_winrate
-    cfg_chase_penalty_policy = 0.001f; // --chase_penalty_policy
-    cfg_chase_penalty_value = 0.01;    // --chase_penalty_value
+    cfg_ladder_min_policy = 0.005f;    // --ladder_min_policy
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -602,8 +602,12 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
+        s_network->forward_queue_clear();
         s_network->nncache_clear();
         Training::clear_training();
+        auto rng = std::make_unique<Random>(5489);
+        Zobrist::init_zobrist(*rng);
+        Random::get_Rng().seedrandom(cfg_rng_seed);
         game.reset_game();
         search = std::make_unique<UCTSearch>(game, *s_network);
         assert(UCTNodePointer::get_tree_size() == 0);

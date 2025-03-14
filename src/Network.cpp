@@ -69,7 +69,7 @@ using namespace Utils;
 static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
     symmetry_nn_idx_table;
 
-void Network::benchmark(GameState* const state, const int iterations) {
+void Network::benchmark(const GameState* state, const int iterations) {
     const auto cpus = cfg_num_threads;
     const Time start;
 
@@ -580,14 +580,14 @@ bool Network::probe_cache(const GameState* const state,
 }
 
 void Network::ladder_update(
-    GameState* const state, Network::Netresult& result) {
+    const GameState* state, Network::Netresult& result) {
 
     int ladder_map[NUM_INTERSECTIONS] = {};
     std::array<float, NUM_INTERSECTIONS> policy = result.policy;
     auto ladder_check_nodes = cfg_ladder_check_nodes;
     std::stable_sort(rbegin(policy), rend(policy));
-    for (auto i = 0; i < cfg_ladder_check_nodes; i++) {
-        if (policy[i] < 0.1f) {
+    for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
+        if (policy[i] < cfg_ladder_min_policy) {
             ladder_check_nodes = i;
             break;
         }
@@ -597,12 +597,16 @@ void Network::ladder_update(
         ladder_map,
         result.policy,
         policy[ladder_check_nodes - 1],
-        std::max(ladder_check_nodes, 1));
+        ladder_check_nodes);
 
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
         if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
 #ifndef NDEBUG
-            myprintf_error("escape depth:%d()\n",
+            const int x = static_cast<int>(i % BOARD_SIZE);
+            const int y = static_cast<int>(i / BOARD_SIZE);
+            const auto vertex = state->board.get_vertex(x, y);
+            auto check_vertex = state->move_to_text(vertex);
+            myprintf_error("escape %s depth:%d(%s)\n", check_vertex.c_str(),
                 ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
 #endif
             if (cfg_ladder_penalty_winrate > 0.0f) {
@@ -613,7 +617,11 @@ void Network::ladder_update(
             result.policy[i] *= 0.0001f;
         } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
 #ifndef NDEBUG
-            myprintf_error("chase depth:%d()\n",
+            const int x = static_cast<int>(i % BOARD_SIZE);
+            const int y = static_cast<int>(i / BOARD_SIZE);
+            const auto vertex = state->board.get_vertex(x, y);
+            auto check_vertex = state->move_to_text(vertex);
+            myprintf_error("chase %s depth:%d(%s)\n", check_vertex.c_str(),
                 ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
 #endif
             result.policy[i] *= 0.0001f;
@@ -622,7 +630,7 @@ void Network::ladder_update(
 }
 
 bool Network::get_output(
-    GameState* const state, const Ensemble ensemble,
+    const GameState* state, const Ensemble ensemble,
     Network::Netresult& result,
     const int symmetry,
     const bool read_cache, const bool write_cache) {
@@ -688,7 +696,7 @@ bool Network::get_output(
     return true;
 }
 
-bool Network::get_output_internal(const GameState* const state,
+bool Network::get_output_internal(const GameState* state,
                                   const int symmetry,
                                   Network::Netresult& result) {
 
@@ -915,4 +923,8 @@ void Network::drain_evals() {
 
 void Network::resume_evals() {
     m_forward->resume();
+}
+
+void Network::forward_queue_clear() {
+    m_forward->forward_queue_clear();
 }

@@ -427,18 +427,21 @@ void GPUScheduler<net_t>::batch_worker(
 template <typename net_t>
 void GPUScheduler<net_t>::drain()
 {
-    if (cfg_use_drain_resume) {
-        m_draining = true;
-    }
+    m_draining = true;
 }
 
 template <typename net_t>
 void GPUScheduler<net_t>::resume()
 {
     // UCTNode::think() should wait for all child threads to complete before resuming.
-    if (cfg_use_drain_resume) {
-        m_draining = false;
-    }
+    m_draining = false;
+}
+
+template <typename net_t>
+void GPUScheduler<net_t>::forward_queue_clear()
+{
+    std::unique_lock<std::mutex> lk(m_mutex);
+    m_forward_queue.clear();
 }
 
 template class GPUScheduler<float>;

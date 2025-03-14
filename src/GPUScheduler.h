@@ -89,6 +89,7 @@ public:
 private:
     void drain() override;
     void resume() override;
+    void forward_queue_clear() override;
     virtual void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,

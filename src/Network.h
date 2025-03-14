@@ -62,7 +62,7 @@ public:
 
     virtual ~Network() = default;
 
-    bool get_output(GameState* const state, Ensemble ensemble,
+    bool get_output(const GameState* state, Ensemble ensemble,
                     Network::Netresult& result,
                     int symmetry = -1, bool read_cache = true,
                     bool write_cache = true);
@@ -75,7 +75,7 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
-    void benchmark(GameState* const state, int iterations = 1600);
+    void benchmark(const GameState* state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
 
@@ -95,6 +95,8 @@ public:
     // Flag the network to be open for business.
     virtual void resume_evals();
 
+    virtual void forward_queue_clear();
+
     NetworkType get_network_type() {
         return m_net_type;
     }
@@ -106,7 +108,7 @@ private:
     bool get_output_internal(const GameState* state,
                              int symmetry,
                              Network::Netresult& result);
-    void ladder_update(GameState* const state, Network::Netresult& result);
+    void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
                                       std::vector<float>::iterator white,
