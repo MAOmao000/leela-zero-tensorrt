@@ -155,17 +155,22 @@ public:
         int potentialLibsFromCaps = 0;
         int numConnectionLibs = 0;
         int maxConnectionLibs = 0;
+        int string_checked[FastBoard::NUM_VERTICES] = {};
 
         for (auto d = 0; d < 4; d++) {
             auto n_vtx = get_state_neighbor(vertex, d);
             if (get_state(n_vtx) == FastBoard::EMPTY) {
                 numImmediateLibs++;
-            } else if (get_state(n_vtx) == opp) {
+            } else if (get_state(n_vtx) == opp
+                && !string_checked[get_parent_stone(n_vtx)]) {
+                string_checked[get_parent_stone(n_vtx)] = 1;
                 if (get_liberties(n_vtx) == 1) {
                     numCaps++;
                     potentialLibsFromCaps += get_string_count(n_vtx);
                 }
-            } else if (get_state(n_vtx) == pla) {
+            } else if (get_state(n_vtx) == pla
+                && !string_checked[get_parent_stone(n_vtx)]) {
+                string_checked[get_parent_stone(n_vtx)] = 1;
                 int connLibs = get_liberties(n_vtx) - 1;
                 numConnectionLibs += connLibs;
                 if (connLibs > maxConnectionLibs) {
@@ -181,9 +186,6 @@ public:
         int vertex,
         vertex_t pla) const
     {
-        if (get_state(vertex) != FastBoard::EMPTY) {
-            return false;
-        }
         // Check that surounding points are are all opponent owned and exactly one of them is capturable
         vertex_t opp = static_cast<vertex_t>((pla) ^ 0x01);
         int oppCapturableLoc = 0;
@@ -193,11 +195,13 @@ public:
                 get_state(n_vtx) != opp) {
                 return false;
             }
-            if (get_state(n_vtx) != opp &&
+            if (get_state(n_vtx) == opp &&
                 get_liberties(n_vtx) == 1) {
-                return false;
+                if (oppCapturableLoc) {
+                    return false;
+                }
+                oppCapturableLoc = n_vtx;
             }
-            oppCapturableLoc = n_vtx;
         }
         if (!oppCapturableLoc) {
             return false;
