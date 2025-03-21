@@ -49,6 +49,7 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
+#include "LadderDetection.h"
 
 using namespace Utils;
 
@@ -300,7 +301,7 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -361,6 +362,22 @@ UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool
         const auto puct = cpuct * psa * (numerator / denom);
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
+
+        if (cfg_ladder_check == check_t::PLAYOUT
+            && state.m_komove == FastBoard::NO_VERTEX) {
+            const auto move = child.get_move();
+            if (move != FastBoard::PASS) {
+                auto depth = IsSimpleLadderEscape(&state, move, cfg_defense_stones * 2);
+                if (depth >= cfg_ladder_defense) {
+                    value *= 0.01;
+                } else {
+                    depth = IsSimpleLadderChase(&state, move, cfg_offense_stones * 2);
+                    if (depth >= cfg_ladder_offense) {
+                        value *= 0.01;
+                    }
+                }
+            }
+        }
 
         if (value > best_value) {
             best_value = value;
