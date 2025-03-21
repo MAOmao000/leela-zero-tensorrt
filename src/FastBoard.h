@@ -143,45 +143,6 @@ public:
     inline int get_parent_stone(int vertex) const {
         return m_parent[vertex];
     }
-    inline void get_bound_num_liberties_after_play(
-        int vertex,
-        vertex_t pla,
-        int& lowerBound,
-        int& upperBound) const
-    {
-        vertex_t opp = static_cast<vertex_t>((pla) ^ 0x01);
-        int numImmediateLibs = 0;
-        int numCaps = 0;
-        int potentialLibsFromCaps = 0;
-        int numConnectionLibs = 0;
-        int maxConnectionLibs = 0;
-        int string_checked[FastBoard::NUM_VERTICES] = {};
-
-        for (auto d = 0; d < 4; d++) {
-            auto n_vtx = get_state_neighbor(vertex, d);
-            if (get_state(n_vtx) == FastBoard::EMPTY) {
-                numImmediateLibs++;
-            } else if (get_state(n_vtx) == opp
-                && !string_checked[get_parent_stone(n_vtx)]) {
-                string_checked[get_parent_stone(n_vtx)] = 1;
-                if (get_liberties(n_vtx) == 1) {
-                    numCaps++;
-                    potentialLibsFromCaps += get_string_count(n_vtx);
-                }
-            } else if (get_state(n_vtx) == pla
-                && !string_checked[get_parent_stone(n_vtx)]) {
-                string_checked[get_parent_stone(n_vtx)] = 1;
-                int connLibs = get_liberties(n_vtx) - 1;
-                numConnectionLibs += connLibs;
-                if (connLibs > maxConnectionLibs) {
-                    maxConnectionLibs = connLibs;
-                }
-            }
-        }
-        lowerBound = numCaps + 
-            (maxConnectionLibs > numImmediateLibs ? maxConnectionLibs : numImmediateLibs);
-        upperBound = numImmediateLibs + potentialLibsFromCaps + numConnectionLibs;
-    }
     inline bool would_be_ko_capture(
         int vertex,
         vertex_t pla) const
