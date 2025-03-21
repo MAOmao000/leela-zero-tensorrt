@@ -168,19 +168,8 @@ void UCTNode::randomize_first_proportionally() {
 }
 
 UCTNode* UCTNode::get_nopass_child(GameState& state) {
-    if (cfg_ladder_chase == chase_t::ROOT) {
-        for (const auto& child : m_children) {
-            /* If we prevent the engine from passing, we must bail out when
-               we only have unreasonable moves to pick, like filling eyes.
-               Note that this knowledge isn't required by the engine,
-               we require it because we're overruling its moves. */
-            if (child->m_move != FastBoard::PASS
-                && !state.board.is_eye(state.get_to_move(), child->m_move)
-                && IsLadderChase(&state, child->m_move) < cfg_ladder_offense) {
-                return child.get();
-            }
-        }
-    } else {
+    if ((!cfg_use_root_escape && !cfg_use_root_chase)
+        || state.m_komove != FastBoard::NO_VERTEX) {
         for (const auto& child : m_children) {
             /* If we prevent the engine from passing, we must bail out when
                we only have unreasonable moves to pick, like filling eyes.
@@ -189,6 +178,45 @@ UCTNode* UCTNode::get_nopass_child(GameState& state) {
             if (child->m_move != FastBoard::PASS
                 && !state.board.is_eye(state.get_to_move(), child->m_move)) {
                 return child.get();
+            }
+        }
+        return nullptr;
+    }
+    for (const auto& child : m_children) {
+        if (child->m_move != FastBoard::PASS
+            && !state.board.is_eye(state.get_to_move(), child->m_move)) {
+            auto depth = 0;
+            if (cfg_use_root_escape) {
+                depth = IsSimpleLadderEscape(&state, child->m_move);
+#ifdef NDEBUG
+                if (depth) {
+                    auto check_vertex = state.move_to_text(child->m_move);
+                    Utils::myprintf_error("get_nopass_child chase %s depth:%d\n",
+                        check_vertex.c_str(), depth);
+                }
+#endif
+                if (!depth && cfg_use_root_chase) {
+                    depth = IsSimpleLadderChase(&state, child->m_move);
+#ifdef NDEBUG
+                    if (depth) {
+                        auto check_vertex = state.move_to_text(child->m_move);
+                        Utils::myprintf_error("get_nopass_child chase %s depth:%d\n",
+                            check_vertex.c_str(), depth);
+                    }
+#endif
+                }
+            } else if (cfg_use_root_chase) {
+                depth = IsSimpleLadderChase(&state, child->m_move);
+#ifdef NDEBUG
+                if (depth) {
+                    auto check_vertex = state.move_to_text(child->m_move);
+                    Utils::myprintf_error("get_nopass_child escape %s depth:%d\n",
+                        check_vertex.c_str(), depth);
+                }
+#endif
+            }
+            if (!depth) {
+                 return child.get();
             }
         }
     }
@@ -249,7 +277,8 @@ UCTNode* UCTNode::get_noladder_child(GameState& state) {
     if (m_children.empty()) {
         return nullptr;
     }
-    if (cfg_ladder_chase != chase_t::ROOT) {
+    if ((!cfg_use_root_escape && !cfg_use_root_chase)
+        || state.m_komove != FastBoard::NO_VERTEX) {
         return m_children.front().get();
     }
 
@@ -258,9 +287,42 @@ UCTNode* UCTNode::get_noladder_child(GameState& state) {
         return front_child;
     }
     for (const auto& child : m_children) {
-        if (child->m_move == FastBoard::PASS ||
-            IsLadderChase(&state, child->m_move) < cfg_ladder_offense) {
+        if (child->m_move == FastBoard::PASS) {
             return child.get();
+        } else {
+            auto depth = 0;
+            if (cfg_use_root_escape) {
+                depth = IsSimpleLadderEscape(&state, child->m_move);
+#ifdef NDEBUG
+                if (depth) {
+                    auto check_vertex = state.move_to_text(child->m_move);
+                    Utils::myprintf_error("get_noladder_child escape %s depth:%d\n",
+                        check_vertex.c_str(), depth);
+                }
+#endif
+                if (!depth && cfg_use_root_chase) {
+                    depth = IsSimpleLadderChase(&state, child->m_move);
+#ifdef NDEBUG
+                    if (depth) {
+                        auto check_vertex = state.move_to_text(child->m_move);
+                        Utils::myprintf_error("get_noladder_child chase %s depth:%d\n",
+                            check_vertex.c_str(), depth);
+                    }
+#endif
+                }
+            } else if (cfg_use_root_chase) {
+                depth = IsSimpleLadderChase(&state, child->m_move);
+#ifdef NDEBUG
+                if (depth) {
+                    auto check_vertex = state.move_to_text(child->m_move);
+                    Utils::myprintf_error("get_noladder_child chase %s depth:%d\n",
+                        check_vertex.c_str(), depth);
+                }
+#endif
+            }
+            if (!depth) {
+                 return child.get();
+            }
         }
     }
     return front_child;
