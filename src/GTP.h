@@ -144,6 +144,7 @@ extern bool cfg_dumbpass;
 extern int cfg_builder_opt_level;
 extern std::vector<int> cfg_gpus;
 extern bool cfg_use_drain_resume;
+extern bool cfg_play_recursive;
 extern trtLog::Logger cfg_logger;
 enum class trtcache_t {
     PLAN, TIMING
@@ -174,10 +175,10 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_use_stdev_uct;
 
-enum class chase_t {
-    EVERY, ROOT
+enum class check_t {
+    EVERY, ROOT, PLAYOUT, SIMPLE
 };
-extern chase_t cfg_ladder_chase;
+extern check_t cfg_ladder_check;
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
@@ -185,6 +186,9 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_check_nodes;
 extern float cfg_ladder_penalty_winrate;
 extern float cfg_ladder_min_policy;
+extern bool cfg_recursive_ladder;
+extern bool cfg_use_root_escape;
+extern bool cfg_use_root_chase;
 
 extern AnalyzeTags cfg_analyze_tags;
 
