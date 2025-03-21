@@ -592,16 +592,31 @@ void Network::ladder_update(
             break;
         }
     }
-    LadderDetection(
-        state,
-        ladder_map,
-        result.policy,
-        policy[ladder_check_nodes - 1],
-        ladder_check_nodes);
-
+    if (cfg_ladder_check == check_t::SIMPLE) {
+        SimpleLadderDetection(
+            state,
+            ladder_map,
+            result.policy,
+            policy[ladder_check_nodes - 1],
+            ladder_check_nodes);
+    } else {
+        LadderDetection(
+            state,
+            ladder_map,
+            result.policy,
+            policy[ladder_check_nodes - 1],
+            ladder_check_nodes);
+    }
+//    auto ladder_defense = cfg_ladder_defense;
+//    auto ladder_offense = cfg_ladder_offense;
+//    if (cfg_ladder_check == check_t::DOUBLE) {
+//        ladder_defense *= 2;
+//        ladder_offense *= 2;
+//    }
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
-#ifndef NDEBUG
+//        if (ladder_map[i] > 0 && ladder_map[i] >= ladder_defense) {
+        if (ladder_map[i] > 0) {
+#ifdef NDEBUG
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
@@ -614,9 +629,13 @@ void Network::ladder_update(
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
                 result.winrate = std::max(0.001f, result.winrate);
             }
-            result.policy[i] *= 0.0001f;
-        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
-#ifndef NDEBUG
+//            result.policy[i] *= 0.0001f;
+//            result.policy[i] *= 0.1f;
+//            result.policy[i] = policy[ladder_check_nodes];
+            result.policy[i] *= std::min(99, ladder_map[i]) / 100;
+//        } else if (ladder_map[i] < 0 && ladder_map[i] <= -ladder_offense) {
+        } else if (ladder_map[i] < 0) {
+#ifdef NDEBUG
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
@@ -624,7 +643,10 @@ void Network::ladder_update(
             myprintf_error("chase %s depth:%d(%s)\n", check_vertex.c_str(),
                 ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
 #endif
-            result.policy[i] *= 0.0001f;
+//            result.policy[i] *= 0.0001f;
+//            result.policy[i] *= 0.1f;
+//            result.policy[i] = policy[ladder_check_nodes];
+            result.policy[i] *= std::min(99, ladder_map[i]) / 100;
         }
     }
 }
@@ -634,6 +656,7 @@ bool Network::get_output(
     Network::Netresult& result,
     const int symmetry,
     const bool read_cache, const bool write_cache) {
+
     if (state->board.get_boardsize() != BOARD_SIZE) {
         return false;
     }
@@ -685,7 +708,10 @@ bool Network::get_output(
         }
     }
 
-    if (cfg_ladder_defense > 0 || cfg_ladder_offense > 0) {
+//    if (cfg_ladder_check != check_t::PLAYOUT &&
+    if ((cfg_ladder_check == check_t::EVERY ||
+        cfg_ladder_check == check_t::SIMPLE) &&
+        (cfg_ladder_defense > 0 || cfg_ladder_offense > 0)) {
         ladder_update(state, result);
     }
     if (write_cache) {

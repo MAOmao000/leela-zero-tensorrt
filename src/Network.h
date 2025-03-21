@@ -64,8 +64,8 @@ public:
 
     bool get_output(const GameState* state, Ensemble ensemble,
                     Network::Netresult& result,
-                    int symmetry = -1, bool read_cache = true,
-                    bool write_cache = true);
+                    const int symmetry = -1, const bool read_cache = true,
+                    const bool write_cache = true);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
