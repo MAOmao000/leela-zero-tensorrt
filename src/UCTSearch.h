@@ -119,6 +119,7 @@ public:
     void increment_playouts();
     std::string explain_last_think() const;
     SearchResult play_simulation(GameState& currstate, UCTNode* node);
+    SearchResult play_simulation_recursive(GameState& currstate, UCTNode* node);
 
 private:
     float get_min_psa_ratio() const;
@@ -155,6 +156,18 @@ private:
 class UCTWorker {
 public:
     UCTWorker(GameState& state, UCTSearch* const search, UCTNode* const root)
+        : m_rootstate(state), m_search(search), m_root(root) {}
+    void operator()();
+
+private:
+    GameState& m_rootstate;
+    UCTSearch* m_search;
+    UCTNode* m_root;
+};
+
+class UCTWorker_recursive {
+public:
+    UCTWorker_recursive(GameState& state, UCTSearch* const search, UCTNode* const root)
         : m_rootstate(state), m_search(search), m_root(root) {}
     void operator()();
 
