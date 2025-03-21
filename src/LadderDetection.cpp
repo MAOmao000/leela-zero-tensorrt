@@ -14,6 +14,195 @@ using namespace Utils;
 #define CHECKED 1
 #define FLIP_COLOR(col) ((col) ^ 0x01)
 
+static bool LadderEscape(
+    unsigned char &depth,
+    GameState *state,
+    const int &str_vtx,
+    const bool &escape,
+    int &escape_pos);
+
+static bool LadderChase(
+    unsigned char &depth,
+    GameState *state,
+    const int &str_vtx,
+    const bool &escape);
+
+static bool LadderEscape(
+    unsigned char &depth,
+    GameState *state,
+    const int &str_vtx,
+    const bool &escape,
+    int &escape_pos)
+{
+    if (escape) {
+        if (depth >= 100) {
+            return ALIVE;
+        }
+    } else {
+        if (depth >= 100) {
+            depth = 255;
+            return ALIVE;
+        }
+    }
+    auto escape_color = state->board.get_state(str_vtx);
+    if (escape_color == FastBoard::EMPTY) {
+        return DEAD;
+    }
+    auto num_liberty = state->board.get_liberties(str_vtx);
+    if (num_liberty >= 2) {
+        return ALIVE;
+    }
+    const auto turn_color = state->board.get_to_move();
+    unsigned char max_depth_alive = 0;
+    unsigned char max_depth_dead = 0;
+    auto base_depth = depth;
+
+    // Check if can capture the stone of the surrounding opponent.
+    unsigned char capture_checked[FastBoard::NUM_VERTICES] = {};
+    auto newpos = str_vtx;
+    auto n_vtx = 0;
+    do {
+        // Check whether can capture the stone at the breathing point of opponent's stones.
+        for (auto d = 0; d < 4; d++) {
+            n_vtx = state->board.get_state_neighbor(newpos, d);
+            if (state->board.get_state(n_vtx) != FLIP_COLOR(escape_color) ||
+                state->board.get_liberties(n_vtx) != 1) {
+                continue;
+            }
+            if (capture_checked[state->board.get_parent_stone(n_vtx)]) {
+                continue;
+            }
+            capture_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
+            auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
+            if (state->is_move_legal(turn_color, liberty_pos[0])) {
+                state->play_move(turn_color, liberty_pos[0]);
+                depth = base_depth;
+                if (LadderChase(
+                        ++depth,
+                        state,
+                        str_vtx,
+                        escape
+                    ) == ALIVE) {
+
+                    max_depth_alive = std::max(depth, max_depth_alive);
+                } else {
+                    max_depth_dead = std::max(depth, max_depth_dead);
+                }
+                state->undo_move();
+            }
+        }
+        newpos = state->board.get_next_stone(newpos);
+    } while (newpos != str_vtx);
+
+    if (escape_pos < 0) {
+        auto liberty_pos = state->board.get_liberty_pos(1, str_vtx);
+        escape_pos = liberty_pos[0];
+    }
+    if (state->is_move_legal(turn_color, escape_pos)) {
+        state->play_move(turn_color, escape_pos);
+        depth = base_depth;
+        if (LadderChase(
+                ++depth,
+                state,
+                str_vtx,
+                escape
+            ) == ALIVE) {
+
+            state->undo_move();
+            depth = std::max(depth, max_depth_alive);
+            return ALIVE;
+        } else {
+            state->undo_move();
+            if (max_depth_alive) {
+                if (escape && !base_depth) {
+                    if (depth > max_depth_alive) {
+                        depth = max_depth_alive;
+                        return ALIVE;
+                    }
+                    return DEAD;
+                } else {
+                    depth = max_depth_alive;
+                    return ALIVE;
+                }
+            }
+            depth = std::max(depth, max_depth_dead);
+            return DEAD;
+        }
+    }
+    if (max_depth_alive) {
+        depth = max_depth_alive;
+        return ALIVE;
+    } else if (max_depth_dead) {
+        depth = max_depth_dead;
+    }
+    return DEAD;
+}
+
+static bool LadderChase(
+    unsigned char &depth,
+    GameState *state,
+    const int &str_vtx,
+    const bool &escape)
+{
+    if (escape) {
+        if (depth >= 100) {
+            return ALIVE;
+        }
+    } else {
+        if (depth >= 100) {
+            depth = 255;
+            return ALIVE;
+        }
+    }
+    auto escape_color = state->board.get_state(str_vtx);
+    if (escape_color == FastBoard::EMPTY) {
+        return DEAD;
+    }
+    auto num_liberty = state->board.get_liberties(str_vtx);
+    auto base_depth = depth;
+    if (num_liberty >= 3) {
+        return ALIVE;
+    } else if (num_liberty <= 1) {
+        return DEAD;
+    }
+    const auto turn_color = state->board.get_to_move();
+    unsigned char max_depth_alive = 0;
+    unsigned char min_depth_dead = 255;
+    auto liberty_pos = state->board.get_liberty_pos(2, str_vtx);
+    for (auto i = 0; i < 2; i++) {
+        if (liberty_pos[i] && state->is_move_legal(turn_color, liberty_pos[i])) {
+            state->play_move(turn_color, liberty_pos[i]);
+            depth = base_depth;
+            int escape_pos = -1;
+            if (LadderEscape(
+                ++depth,
+                state,
+                str_vtx,
+                escape,
+                escape_pos
+                ) == DEAD) {
+
+                if (!escape) {
+                    state->undo_move();
+                    return DEAD;
+                }
+                min_depth_dead = std::min(depth, min_depth_dead);
+            } else {
+                max_depth_alive = std::max(depth, max_depth_alive);
+            }
+            state->undo_move();
+        //} else {
+        // liberty_pos[i] is_suicide
+        }
+    }
+    if (min_depth_dead < 255) {
+        depth = min_depth_dead;
+        return DEAD;
+    }
+    depth = std::max(depth, max_depth_alive);
+    return ALIVE;
+}
+
 static constexpr int MAX_LADDER_SEARCH_NODE_BUDGET = 25000;
 static constexpr int stackSize = NUM_INTERSECTIONS * 3 / 2 + 1;
 
@@ -30,7 +219,7 @@ static int IsLadderEscape(
     std::array<int, stackSize * 2> buf;
 
     int max_depth = 0;
-    int dead_depth = stackSize;
+    int dead_depth = stackSize + 1;
     bool returnValue = ALIVE;
 
     int stackIdx = 0;
@@ -52,7 +241,11 @@ static int IsLadderEscape(
             if (returnValue == ALIVE) {
                 return std::max(max_depth, 1);
             } else {
-                return -dead_depth;
+                if (dead_depth <= stackSize) {
+                    return -dead_depth;
+                } else {
+                    return 0;
+                }
             }
         }
         // If we hit the stack limit, just consider it a failed ladder.
@@ -92,7 +285,6 @@ static int IsLadderEscape(
                     returnValue = ALIVE;
                     returnedFromDeeper = true;
                     stackIdx--;
-                    moveListAlive[stackIdx]++;
                     continue;
                 }
                 // Check if can capture the stone of the surrounding opponent.
@@ -131,7 +323,7 @@ static int IsLadderEscape(
                 auto escape_liberty_pos = state->board.get_liberty_pos(1, str_vtx);
                 if (!breath_checked[escape_liberty_pos[0]]
                     && state->is_move_legal(pla, escape_liberty_pos[0])) {
-                    breath_checked[escape_liberty_pos[0]] = 1;
+                    breath_checked[escape_liberty_pos[0]] = CHECKED;
                     if (static_cast<size_t>(start + moveListLen) >= buf.size()) {
                         return 0;
                     }
@@ -141,29 +333,30 @@ static int IsLadderEscape(
 
                 // Check if the target stones have escaped at this point.
                 if (breath_checked[escape_liberty_pos[0]]) {
-                    int lowerBoundLibs;
-                    int upperBoundLibs;
-                    state->board.get_bound_num_liberties_after_play(
-                        escape_liberty_pos[0],
-                        pla,
-                        lowerBoundLibs,
-                        upperBoundLibs);
+                    state->play_move(pla, escape_liberty_pos[0]);
                     // Defender immediately wins if there are provably enough libs
-                    if (lowerBoundLibs >= 3) {
-                        moveListAlive[stackIdx]++;
+                    if (state->board.get_liberties(escape_liberty_pos[0]) >= 3) {
+                        state->undo_move();
+                        returnValue = ALIVE;
                         returnedFromDeeper = true;
                         stackIdx--;
-                        returnValue = ALIVE;
                         continue;
                     }
                     // Attacker immediately wins if defender has not enough libs and there are no alternatives
-                    if (moveListLen == 1 && upperBoundLibs <= 1) {
-                        returnValue = DEAD;
-                        dead_depth = std::min(dead_depth, stackIdx);
-                        returnedFromDeeper = true;
-                        stackIdx--;
-                        continue;
+                    if (moveListLen == 1 &&
+                        state->board.get_liberties(escape_liberty_pos[0]) <= 1) {
+                        auto capture_liberty_pos =
+                            state->board.get_liberty_pos(1, escape_liberty_pos[0]);
+                        if (state->is_move_legal(opp, capture_liberty_pos[0])) {
+                            state->undo_move();
+                            returnValue = DEAD;
+                            dead_depth = std::min(dead_depth, stackIdx);
+                            returnedFromDeeper = true;
+                            stackIdx--;
+                            continue;
+                        }
                     }
+                    state->undo_move();
                 }
 
                 // Is there any way to escape?
@@ -185,9 +378,9 @@ static int IsLadderEscape(
                     stackIdx--;
                     continue;
                 } else if (libs >= 3) {
+                    returnValue = ALIVE;
                     returnedFromDeeper = true;
                     stackIdx--;
-                    returnValue = ALIVE;
                     continue;
                 }
                 moveListLen = 2;
@@ -254,7 +447,6 @@ static int IsLadderEscape(
                         returnValue = ALIVE;
                         returnedFromDeeper = true;
                         stackIdx--;
-                        moveListAlive[stackIdx]++;
                         continue;
                     } else if (num_libs0 >= 3) {
                         // If move it into libs0, it may be captured.
@@ -307,9 +499,23 @@ static int IsLadderEscape(
             if (returnedFromDeeper) {
                 state->undo_move();
             }
-            // Counting the aliving moves
-            if (returnValue == ALIVE) {
-                moveListAlive[stackIdx]++;
+            if (cfg_ladder_defense > 1) {
+                // Counting the aliving moves
+                if (returnValue == ALIVE) {
+                    moveListAlive[stackIdx]++;
+                }
+            } else {
+                // Defender has a move that is not ladder captured?
+                if (isDefender && returnValue == ALIVE) {
+                    returnedFromDeeper = true;
+                    stackIdx--;
+                    continue;
+                // Attacker has a move that does ladder capture?
+                } else if (!isDefender && returnValue == DEAD) {
+                    returnedFromDeeper = true;
+                    stackIdx--;
+                    continue;
+                }
             }
             // Move on to the next move to search
             moveListCur[stackIdx]++;
@@ -318,7 +524,10 @@ static int IsLadderEscape(
         if (moveListCur[stackIdx] >= moveListLens[stackIdx]) {
             if (moveListAlive[stackIdx] < 1) {
                 // No move to alive
-                returnValue = DEAD;
+                if (returnValue == ALIVE) {
+                    returnValue = DEAD;
+                    dead_depth = std::min(dead_depth, stackIdx);
+                }
             } else {
                 if (isDefender) {
                     // There is more than one move that can alive
@@ -329,7 +538,10 @@ static int IsLadderEscape(
                         returnValue = ALIVE;
                     } else {
                         // There is more than one move that can capture an opponent's stone
-                        returnValue = DEAD;
+                        if (returnValue == ALIVE) {
+                            returnValue = DEAD;
+                            dead_depth = std::min(dead_depth, stackIdx);
+                        }
                     }
                 }
             }
@@ -344,7 +556,10 @@ static int IsLadderEscape(
         // loop again and just try the next move.
         if (!state->is_move_legal(p, move)) {
             if (isDefender) {
-                returnValue = DEAD;
+                if (returnValue == ALIVE) {
+                    returnValue = DEAD;
+                    dead_depth = std::min(dead_depth, stackIdx);
+                }
             } else {
                 returnValue = ALIVE;
             }
@@ -364,21 +579,178 @@ static int IsLadderEscape(
     }
 }
 
-int IsLadderChase(
+int IsSimpleLadderEscape(
     const GameState* base_state,
-    const int &move_vertex
+    const int &move_vertex,
+    const int &check_defense_stones
     )
 {
     auto state = std::make_unique<GameState>(base_state);
+    const auto turn_color = state->board.get_to_move(); // Escape side
+    const auto opponent_color = FLIP_COLOR(turn_color); // Chase side
+
+    // No need to check for escape?
+    if (cfg_ladder_defense < 1) {
+        return 0;
+    }
+    // Check whether the moved stone cannot escape.
+    state->play_move(turn_color, move_vertex); // Check for escape situations
+    // Do not check if the number of escape stones is less than the specified number
+    // or there are not two breathing points.
+    auto defense_stones = state->board.get_string_count(move_vertex);
+    if (defense_stones < check_defense_stones
+        || state->board.get_liberties(move_vertex) != 2) {
+        return 0;
+    }
+    // Check start.
+    auto depth = 0;
+    auto liberty_vtx = move_vertex; // breathing point vertex of the escape side
+    while (true) {
+        if (depth == 0) {
+            depth++;
+        } else {
+            depth++;
+            state->play_move(turn_color, liberty_vtx); // escape
+            if (state->board.get_liberties(liberty_vtx) == 1) {
+                // There is no escape route, so check to can capture the oppornent's stones.
+                auto one_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
+                if (state->is_move_legal(opponent_color, one_liberty_pos[0])) {
+                    state->undo_move(); // Return to the state of board before the escape
+                    int capture_checked[FastBoard::NUM_VERTICES] = {};
+                    int breath_checked[FastBoard::NUM_VERTICES] = {};
+                    auto newpos = move_vertex;
+                    auto n_vtx = 0;
+                    // Check whether can capture the stone at the breathing point of opponent's stones.
+                    do {
+                        for (auto d = 0; d < 4; d++) {
+                            n_vtx = state->board.get_state_neighbor(newpos, d);
+                            if (state->board.get_state(n_vtx) != opponent_color ||
+                                state->board.get_liberties(n_vtx) != 1 ||
+                                capture_checked[state->board.get_parent_stone(n_vtx)]) {
+                                continue;
+                            }
+                            capture_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
+                            auto capture_liberty_pos = state->board.get_liberty_pos(1, n_vtx);
+                            if (!breath_checked[capture_liberty_pos[0]]) {
+                                breath_checked[capture_liberty_pos[0]] = CHECKED;
+                                if (state->is_move_legal(turn_color, capture_liberty_pos[0])) {
+                                    // Can escape because can capture the opponent's stones.
+                                    return 0;
+                                }
+                            }
+                        }
+                        newpos = state->board.get_next_stone(newpos);
+                    } while (newpos != move_vertex);
+                    // Cannot escape because cannot capture the opponent's stones.
+                    return depth + (defense_stones - 1) * 2;
+                } else {
+                    // For ko etc. the opposing player cannot place a stone on the capture position
+                    // Can escape.
+                    return 0;
+                }
+            } else if (state->board.get_liberties(liberty_vtx) >= 3) {
+                // If the turning player have three or more escape routes, the turn player can escape.
+                return 0;
+            }
+        }
+        // Look for a move that will create a staircase of escape's string.
+        auto chase_move = -1;
+        auto two_liberty_pos = state->board.get_liberty_pos(2, liberty_vtx);
+        for (auto i = 0; i < 2; i++) {
+            if (std::abs(two_liberty_pos[i] - liberty_vtx) == 1) {
+                if ((state->board.get_state(liberty_vtx - 1) == turn_color
+                    && state->board.get_state(liberty_vtx - 2) != turn_color)
+                    || (state->board.get_state(liberty_vtx + 1) == turn_color
+                    && state->board.get_state(liberty_vtx + 2) != turn_color)) {
+                    if (state->is_move_legal(opponent_color, two_liberty_pos[i])) {
+                        chase_move = two_liberty_pos[i];
+                        break;
+                    }
+                }
+            } else if (std::abs(two_liberty_pos[i] - liberty_vtx) == BOARD_SIZE + 1) {
+                if ((state->board.get_state(liberty_vtx - BOARD_SIZE - 1) == turn_color
+                    && state->board.get_state(liberty_vtx - 2 * BOARD_SIZE - 2) != turn_color)
+                    || (state->board.get_state(liberty_vtx + BOARD_SIZE + 1) == turn_color
+                    && state->board.get_state(liberty_vtx + 2 * BOARD_SIZE + 2) != turn_color)) {
+                    if (state->is_move_legal(opponent_color, two_liberty_pos[i])) {
+                        chase_move = two_liberty_pos[i];
+                        break;
+                    }
+                }
+            }
+        }
+        if (chase_move == -1) {
+            // If there is no corresponding move, play the first move found.
+            chase_move = two_liberty_pos[0];
+        }
+        // Try the first candidate move.
+        state->play_move(opponent_color, chase_move); // chase_move
+        depth++;
+        if (state->board.get_state(liberty_vtx) == FastBoard::EMPTY) {
+            // The player cannot escape because the stone of the turning player is taken.
+            return depth + (defense_stones - 1) * 2;
+        } else if (state->board.get_liberties(liberty_vtx) != 1) {
+            // The opposing player cannot be atari and can escape.
+            return 0;
+        }
+        auto escape_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
+        if (!state->is_move_legal(turn_color, escape_liberty_pos[0])) {
+            // The turning player cannot be atari and can escape.
+            return 0;
+        }
+        // If it is a move that can be escaped by ladder breaker or other means,
+        // try another move.
+        state->play_move(turn_color, escape_liberty_pos[0]); // escape
+        if (state->board.get_liberties(escape_liberty_pos[0]) < 3) {
+            state->undo_move();
+            liberty_vtx = escape_liberty_pos[0];
+            continue;
+        }
+        // Try a second candidate move.
+        state->undo_move();
+        state->undo_move();
+        if (chase_move == two_liberty_pos[0]) {
+            chase_move = two_liberty_pos[1];
+        } else {
+            chase_move = two_liberty_pos[0];
+        }
+        state->play_move(opponent_color, chase_move); // chase_move
+        if (state->board.get_state(liberty_vtx) == FastBoard::EMPTY) {
+            // The player cannot escape because the stone of the turning player is taken.
+            return depth + (defense_stones - 1) * 2;
+        } else if (state->board.get_liberties(liberty_vtx) != 1) {
+            // The opposing player cannot be atari and can escape.
+            return 0;
+        }
+        escape_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
+        if (!state->is_move_legal(turn_color, escape_liberty_pos[0])) {
+            // The opposing player cannot be atari and can escape.
+            return 0;
+        }
+        liberty_vtx = escape_liberty_pos[0];
+    }
+}
+
+int IsSimpleLadderChase(
+    const GameState* base_state,
+    const int &move_vertex,
+    const int &check_offense_stones
+    )
+{
+    auto state = std::make_unique<GameState>(base_state);
+    const auto turn_color = state->board.get_to_move(); // Chase side
+    const auto opponent_color = FLIP_COLOR(turn_color); // Escape side
+
+    // No need to check for chase?
     if (cfg_ladder_offense < 1) {
         return 0;
     }
+    // Can capture the opponent's stone by the moving stone?
+    state->play_move(turn_color, move_vertex);
+    // Check to see if there are adjacent stones of opponents
+    // the turning player might be able to capture on the top, bottom, left, or right.
+    auto offense_stones = 1;
     auto depth = 1;
-    const auto turn_color = state->board.get_to_move(); // chase
-    const auto opponent_color = FLIP_COLOR(turn_color); // escape
-
-    state->play_move(turn_color, move_vertex); // chase
-
     auto str_vtx = -1;
     auto liberty_vtx = -1;
     int ladder_checked[FastBoard::NUM_VERTICES] = {};
@@ -386,36 +758,40 @@ int IsLadderChase(
         auto n_vtx = state->board.get_state_neighbor(move_vertex, d);
         if (state->board.get_state(n_vtx) == opponent_color
             && !ladder_checked[state->board.get_parent_stone(n_vtx)]
-            && state->board.get_string_count(n_vtx) >= cfg_offense_stones
+            && state->board.get_string_count(n_vtx) >= check_offense_stones
             && state->board.get_liberties(n_vtx) == 1) {
             ladder_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
             auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
             if (state->is_move_legal(opponent_color, liberty_pos[0])) {
                 if (liberty_vtx != -1) {
+                    // If the stone is adjacent to an inescapable opponent's stone,
+                    // it can be captured.
                     return 0;
                 }
                 str_vtx = n_vtx;
                 liberty_vtx = liberty_pos[0];
+                offense_stones = state->board.get_string_count(n_vtx);
             }
         }
     }
     if (liberty_vtx == -1) {
+        // Not checked because there are no applicable stones around.
         return 0;
     }
     while (true) {
-        state->play_move(opponent_color, liberty_vtx); // escape
         depth++;
+        state->play_move(opponent_color, liberty_vtx); // escape
         if (state->board.get_liberties(liberty_vtx) == 1) {
+            // There is no escape route, so check to can capture the oppornent's stones.
             auto one_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
             if (state->is_move_legal(turn_color, one_liberty_pos[0])) {
-                // Check if can capture the stone of the surrounding opponent.
-                state->undo_move();
+                state->undo_move(); // Return to the state of board before the escape
                 int capture_checked[FastBoard::NUM_VERTICES] = {};
                 int breath_checked[FastBoard::NUM_VERTICES] = {};
                 auto newpos = str_vtx;
                 auto n_vtx = 0;
+                // Check whether can capture the stone at the breathing point of opponent's stones.
                 do {
-                    // Check whether can capture the stone at the breathing point of opponent's stones.
                     for (auto d = 0; d < 4; d++) {
                         n_vtx = state->board.get_state_neighbor(newpos, d);
                         if (state->board.get_state(n_vtx) != turn_color ||
@@ -430,77 +806,97 @@ int IsLadderChase(
                         if (!breath_checked[capture_liberty_pos[0]]) {
                             breath_checked[capture_liberty_pos[0]] = CHECKED;
                             if (state->is_move_legal(opponent_color, capture_liberty_pos[0])) {
-                                return depth;
+                                // Can escape because can capture the opponent's stones.
+                                return depth + (offense_stones - 1) * 2;
                             }
                         }
                     }
                     newpos = state->board.get_next_stone(newpos);
                 } while (newpos != str_vtx);
+                // Cannot escape because cannot capture the opponent's stones.
                 return 0;
             } else {
-                return depth;
+                // For ko etc. the turning player cannot place a stone on the capture position
+                // Can escape.
+                return depth + (offense_stones - 1) * 2;
             }
         } else if (state->board.get_liberties(liberty_vtx) >= 3) {
-            return depth;
+            // If the opposing player have three or more escape routes, the turn player can escape.
+            return depth + (offense_stones - 1) * 2;
         }
+        // Look for a move that will create a staircase of escape's string.
         auto chase_move = -1;
         auto two_liberty_pos = state->board.get_liberty_pos(2, liberty_vtx);
-        if (std::abs(two_liberty_pos[0] - liberty_vtx) == 1) {
-            if ((state->board.get_state(liberty_vtx - 1) == opponent_color
-                && state->board.get_state(liberty_vtx - 2) != opponent_color)
-                || (state->board.get_state(liberty_vtx + 1) == opponent_color
-                && state->board.get_state(liberty_vtx + 2) != opponent_color)) {
-                if (state->is_move_legal(turn_color, two_liberty_pos[0])) {
-                    chase_move = two_liberty_pos[0];
-                }
-            }
-        } else if (std::abs(two_liberty_pos[0] - liberty_vtx) == BOARD_SIZE + 1) {
-            if ((state->board.get_state(liberty_vtx - BOARD_SIZE - 1) == opponent_color
-                && state->board.get_state(liberty_vtx - 2 * BOARD_SIZE - 2) != opponent_color)
-                || (state->board.get_state(liberty_vtx + BOARD_SIZE + 1) == opponent_color
-                && state->board.get_state(liberty_vtx + 2 * BOARD_SIZE + 2) != opponent_color)) {
-                if (state->is_move_legal(turn_color, two_liberty_pos[0])) {
-                    chase_move = two_liberty_pos[0];
-                }
-            }
-        }
-        if (std::abs(two_liberty_pos[1] - liberty_vtx) == 1) {
-            if ((state->board.get_state(liberty_vtx - 1) == opponent_color
-                && state->board.get_state(liberty_vtx - 2) != opponent_color)
-                || (state->board.get_state(liberty_vtx + 1) == opponent_color
-                && state->board.get_state(liberty_vtx + 2) != opponent_color)) {
-                if (state->is_move_legal(turn_color, two_liberty_pos[1])) {
-                    if (chase_move != -1) {
-                        return 0;
+        for (auto i = 0; i < 2; i++) {
+            if (std::abs(two_liberty_pos[i] - liberty_vtx) == 1) {
+                if ((state->board.get_state(liberty_vtx - 1) == opponent_color
+                    && state->board.get_state(liberty_vtx - 2) != opponent_color)
+                    || (state->board.get_state(liberty_vtx + 1) == opponent_color
+                    && state->board.get_state(liberty_vtx + 2) != opponent_color)) {
+                    if (state->is_move_legal(turn_color, two_liberty_pos[i])) {
+                        chase_move = two_liberty_pos[i];
+                        break;
                     }
-                    chase_move = two_liberty_pos[1];
                 }
-            }
-        } else if (std::abs(two_liberty_pos[1] - liberty_vtx) == BOARD_SIZE + 1) {
-            if ((state->board.get_state(liberty_vtx - BOARD_SIZE - 1) == opponent_color
-                && state->board.get_state(liberty_vtx - 2 * BOARD_SIZE - 2) != opponent_color)
-                || (state->board.get_state(liberty_vtx + BOARD_SIZE + 1) == opponent_color
-                && state->board.get_state(liberty_vtx + 2 * BOARD_SIZE + 2) != opponent_color)) {
-                if (state->is_move_legal(turn_color, two_liberty_pos[1])) {
-                    if (chase_move != -1) {
-                        return 0;
+            } else if (std::abs(two_liberty_pos[i] - liberty_vtx) == BOARD_SIZE + 1) {
+                if ((state->board.get_state(liberty_vtx - BOARD_SIZE - 1) == opponent_color
+                    && state->board.get_state(liberty_vtx - 2 * BOARD_SIZE - 2) != opponent_color)
+                    || (state->board.get_state(liberty_vtx + BOARD_SIZE + 1) == opponent_color
+                    && state->board.get_state(liberty_vtx + 2 * BOARD_SIZE + 2) != opponent_color)) {
+                    if (state->is_move_legal(turn_color, two_liberty_pos[i])) {
+                        chase_move = two_liberty_pos[i];
+                        break;
                     }
-                    chase_move = two_liberty_pos[1];
                 }
             }
         }
         if (chase_move == -1) {
-            return 0;
+            // If there is no corresponding move, play the first move found.
+            chase_move = two_liberty_pos[0];
         }
+        // Try the first candidate move.
         state->play_move(turn_color, chase_move); // chase_move
         depth++;
-        if (state->board.get_state(liberty_vtx) == FastBoard::EMPTY ||
-            state->board.get_liberties(liberty_vtx) != 1) {
+        if (state->board.get_state(liberty_vtx) == FastBoard::EMPTY) {
+            // The player cannot escape because the stone of the opposing player is taken.
             return 0;
+        } else if (state->board.get_liberties(liberty_vtx) != 1) {
+            // The turning player cannot be atari and can escape.
+            return depth + (offense_stones - 1) * 2;
         }
         auto escape_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
         if (!state->is_move_legal(opponent_color, escape_liberty_pos[0])) {
+            // The opposing player cannot be atari and can escape.
+            return depth + (offense_stones - 1) * 2;
+        }
+        // If it is a move that can be escaped by ladder breaker or other means,
+        // try another move.
+        state->play_move(opponent_color, escape_liberty_pos[0]); // escape
+        if (state->board.get_liberties(escape_liberty_pos[0]) < 3) {
+            state->undo_move();
+            liberty_vtx = escape_liberty_pos[0];
+            continue;
+        }
+        // Try a second candidate move.
+        state->undo_move();
+        state->undo_move();
+        if (chase_move == two_liberty_pos[0]) {
+            chase_move = two_liberty_pos[1];
+        } else {
+            chase_move = two_liberty_pos[0];
+        }
+        state->play_move(turn_color, chase_move); // chase_move
+        if (state->board.get_state(liberty_vtx) == FastBoard::EMPTY) {
+            // The player cannot escape because the stone of the opposing player is taken.
             return 0;
+        } else if (state->board.get_liberties(liberty_vtx) != 1) {
+            // The turning player cannot be atari and can escape.
+            return depth + (offense_stones - 1) * 2;
+        }
+        escape_liberty_pos = state->board.get_liberty_pos(1, liberty_vtx);
+        if (!state->is_move_legal(opponent_color, escape_liberty_pos[0])) {
+            // The turning player cannot be atari and can escape.
+            return depth + (offense_stones - 1) * 2;
         }
         liberty_vtx = escape_liberty_pos[0];
     }
@@ -522,7 +918,6 @@ void LadderDetection(
         return;
     }
     int check_nodes_count = 0;
-    char ladder_checked[FastBoard::NUM_VERTICES] = {};
 
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         if (check_nodes_count >= check_nodes) {
@@ -531,65 +926,205 @@ void LadderDetection(
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state->board.get_vertex(x, y);
+        if (state->board.get_state(vertex) != FastBoard::EMPTY
+            || policy[i] < ladder_min_policy
+            || !state->is_move_legal(turn_color, vertex)) {
+            continue;
+        }
+        check_nodes_count++;
 
-        if (cfg_ladder_defense > 0 &&
-            state->board.get_state(vertex) == FastBoard::EMPTY &&
-            cfg_defense_stones < 1 &&
-            policy[i] >= ladder_min_policy) {
-            auto liberty_count = 0;
-            std::array<int, 4> liberty_pos;
+        state->play_move(turn_color, vertex);
+        if (cfg_recursive_ladder) {
+            if (cfg_ladder_defense > 0 &&
+                state->board.get_string_count(vertex) >= cfg_defense_stones &&
+                state->board.get_liberties(vertex) == 2) {
+
+                unsigned char depth = 0;
+                if (LadderChase(
+                    depth,
+                    state.get(),
+                    vertex,
+                    true
+                    ) == DEAD) {
+
+/*
+                    if (depth >= state->board.get_string_count(vertex) * 2) {
+                        ladder_pos[i] = depth;
+                    } else {
+                        ladder_pos[i] = depth * 2;
+                    }
+*/
+                    ladder_pos[i] = depth + state->board.get_string_count(vertex) * 2;
+                }
+            }
+            if (cfg_ladder_offense < 1) {
+                state->undo_move();
+                continue;
+            }
+/*
+            if (cfg_use_simple_chase) {
+                state->undo_move();
+                auto depth = IsSimpleLadderChase(state.get(), vertex, cfg_offense_stones);
+                if (depth > 0) {
+                    ladder_pos[i] = -depth;
+                }
+                continue;
+            }
+*/
+            auto offense_stones = 1;
+            auto str_vtx = -1;
+            auto liberty_vtx = -1;
+            char ladder_checked[FastBoard::NUM_VERTICES] = {};
             for (auto d = 0; d < 4; d++) {
                 auto n_vtx = state->board.get_state_neighbor(vertex, d);
-                if (state->board.get_state(n_vtx) == turn_color) {
-                    liberty_count = 0;
-                    break;
-                } else if (state->board.get_state(n_vtx) == FastBoard::EMPTY &&
-                    state->is_move_legal(opponent_color, n_vtx)) {
-                    liberty_pos[liberty_count] = n_vtx;
-                    liberty_count++;
-                }
-            }
-            if (liberty_count == 2 && state->is_move_legal(turn_color, vertex)) {
-                check_nodes_count++;
-                state->play_move(turn_color, vertex);
-                auto depth = IsLadderEscape(state.get(), vertex);
-                if (depth < 0) {
-                    ladder_pos[i] = 1 - depth;
-                }
-                state->undo_move();
-            }
-        } else if (cfg_ladder_defense > 0 &&
-            state->board.get_state(vertex) == turn_color &&
-            !ladder_checked[state->board.get_parent_stone(vertex)] &&
-            state->board.get_string_count(vertex) >= cfg_defense_stones &&
-            state->board.get_liberties(vertex) == 1) {
-
-            ladder_checked[state->board.get_parent_stone(vertex)] = CHECKED;
-            auto liberty_pos = state->board.get_liberty_pos(1, vertex);
-            auto xy = state->board.get_xy(liberty_pos[0]);
-            auto move = xy.first + xy.second * BOARD_SIZE;
-
-            if (policy[move] >= ladder_min_policy) {
-                check_nodes_count++;
-                if (!state->is_move_legal(turn_color, liberty_pos[0])) {
-                    ladder_pos[move] = 1;
-                } else {
-                    auto depth = IsLadderEscape(state.get(), vertex);
-                    if (depth < 0) {
-                        ladder_pos[move] = -depth;
+                if (state->board.get_state(n_vtx) == opponent_color
+                    && !ladder_checked[state->board.get_parent_stone(n_vtx)]
+                    && state->board.get_liberties(n_vtx) == 1) {
+                    ladder_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
+                    auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
+                    if (state->is_move_legal(opponent_color, liberty_pos[0])) {
+                        if (liberty_vtx != -1) {
+                            liberty_vtx = -1;
+                            break;
+                        }
+                        str_vtx = n_vtx;
+                        liberty_vtx = liberty_pos[0];
+                        offense_stones = state->board.get_string_count(n_vtx);
                     }
                 }
             }
-        }
-        if (cfg_ladder_offense > 0 &&
-            cfg_ladder_chase == chase_t::EVERY &&
-            state->board.get_state(vertex) == FastBoard::EMPTY &&
-            ladder_pos[i] == 0 &&
-            policy[i] >= ladder_min_policy) {
+            if (liberty_vtx != -1
+//                && state->board.get_string_count(str_vtx) >= cfg_offense_stones) {
+                && offense_stones >= cfg_offense_stones) {
+                unsigned char depth = 0;
+                if (LadderEscape(
+                    depth,
+                    state.get(),
+                    str_vtx,
+                    false,
+                    liberty_vtx
+                    ) == ALIVE) {
 
-            check_nodes_count++;
-            int depth = IsLadderChase(state.get(), vertex);
+/*
+                    if (depth >= state->board.get_string_count(str_vtx) * 2) {
+                        ladder_pos[i] = -depth;
+                    } else {
+                        ladder_pos[i] = -depth * 2;
+                    }
+*/
+                    ladder_pos[i] = -depth - offense_stones * 2;
+                }
+            }
+            state->undo_move();
+            continue;
+        }
+        if (cfg_ladder_defense > 0 &&
+            state->board.get_string_count(vertex) >= cfg_defense_stones &&
+            state->board.get_liberties(vertex) == 2) {
+
+            auto depth = IsLadderEscape(state.get(), vertex);
+            if (depth < 0) {
+                ladder_pos[i] = 1 - (depth - state->board.get_string_count(vertex) * 2);
+            }
+        }
+        if (cfg_ladder_offense < 1) {
+            state->undo_move();
+            continue;
+        }
+/*
+        if (cfg_use_simple_chase) {
+            state->undo_move();
+            auto depth = IsSimpleLadderChase(state.get(), vertex, cfg_offense_stones);
             if (depth > 0) {
+                ladder_pos[i] = -depth;
+            }
+            continue;
+        }
+*/
+        std::array<int, 4> str_vtx = {-1, -1, -1, -1};
+        std::array<int, 4> liberty_vtx = {-1, -1, -1, -1};
+        auto opponent_num = 0;
+        char ladder_checked[FastBoard::NUM_VERTICES] = {};
+        for (auto d = 0; d < 4; d++) {
+            auto n_vtx = state->board.get_state_neighbor(vertex, d);
+            if (state->board.get_state(n_vtx) == opponent_color
+                && !ladder_checked[state->board.get_parent_stone(n_vtx)]
+                && state->board.get_liberties(n_vtx) == 1) {
+                ladder_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
+                auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
+                if (state->is_move_legal(opponent_color, liberty_pos[0])) {
+                    str_vtx[opponent_num] = n_vtx;
+                    liberty_vtx[opponent_num] = liberty_pos[0];
+                    opponent_num++;
+                }
+            }
+        }
+        for (auto opp_i = 0; opp_i < opponent_num; opp_i++) {
+            if (state->board.get_string_count(str_vtx[opp_i]) >= cfg_offense_stones) {
+                state->play_move(opponent_color, liberty_vtx[opp_i]);
+                if (state->board.get_liberties(liberty_vtx[opp_i]) == 2) {
+                    auto depth = IsLadderEscape(state.get(), str_vtx[opp_i]);
+                    if (depth < 0 && ladder_pos[i] < 0) {
+                        ladder_pos[i] = 0;
+                        state->undo_move();
+                        break;
+                    } else if (depth > 0 && ladder_pos[i] <= 0) {
+                        depth += state->board.get_string_count(str_vtx[opp_i]) * 2;
+                        ladder_pos[i] = std::min(-depth, ladder_pos[i]);
+                    }
+                }
+                state->undo_move();
+            }
+        }
+        state->undo_move();
+    }
+}
+
+void SimpleLadderDetection(
+    const GameState* base_state,
+    int* const ladder_pos,
+    const std::array<float, NUM_INTERSECTIONS> &policy,
+    const float &ladder_min_policy,
+    const int &check_nodes
+    )
+{
+    auto state = std::make_unique<GameState>(base_state);
+    const auto turn_color = state->board.get_to_move();
+
+    if (state->m_komove != FastBoard::NO_VERTEX) {
+        return;
+    }
+    int check_nodes_count = 0;
+
+    for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
+        if (check_nodes_count >= check_nodes) {
+            break;
+        }
+        const auto x = i % BOARD_SIZE;
+        const auto y = i / BOARD_SIZE;
+        const auto vertex = state->board.get_vertex(x, y);
+        if (state->board.get_state(vertex) != FastBoard::EMPTY
+            || policy[i] < ladder_min_policy
+            || !state->is_move_legal(turn_color, vertex)) {
+            continue;
+        }
+        check_nodes_count++;
+        auto depth = IsSimpleLadderEscape(state.get(), vertex, cfg_defense_stones);
+        if (depth > 0) {
+#ifndef NDEBUG
+            auto check_vertex = state->move_to_text(vertex);
+            myprintf_error("escape %s depth:%d\n", check_vertex.c_str(), depth);
+#endif
+            ladder_pos[i] = depth;
+        }
+
+        if (cfg_ladder_offense < 1) {
+            depth = IsSimpleLadderChase(state.get(), vertex, cfg_offense_stones);
+            if (depth > 0) {
+#ifndef NDEBUG
+                auto check_vertex = state->move_to_text(vertex);
+                myprintf_error("chase %s depth:%d\n", check_vertex.c_str(), depth);
+#endif
                 ladder_pos[i] = -depth;
             }
         }
