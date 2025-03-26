@@ -301,7 +301,7 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -363,19 +363,32 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
-        if (cfg_ladder_check == check_t::PLAYOUT
-            && state.m_komove == FastBoard::NO_VERTEX) {
+        if (state.m_komove == FastBoard::NO_VERTEX &&
+            cfg_ladder_check == check_t::PLAYOUT) {
+
             const auto move = child.get_move();
             if (move != FastBoard::PASS) {
-                auto depth = IsSimpleLadderEscape(&state, move, cfg_defense_stones * 2);
-                if (depth >= cfg_ladder_defense) {
-                    value *= 0.01;
-                } else {
-                    depth = IsSimpleLadderChase(&state, move, cfg_offense_stones * 2);
+                state.play_move(state.board.get_to_move(), child->m_move);
+                if (cfg_ladder_defense > 0 &&
+                    state.board.get_string_count(move) >= cfg_defense_stones &&
+                    state.board.get_liberties(move) == 2
+                ) {
+                    auto depth = IsLadderEscape(&state, move);
+                    if (depth <= -cfg_ladder_defense) {
+                        value *= 0.01;
+                    } else if (cfg_ladder_offense > 0) {
+                        depth = IsLadderChase(&state, move);
+                        if (depth >= cfg_ladder_offense) {
+                            value *= 0.01;
+                        }
+                    }
+                } else if (cfg_ladder_offense > 0) {
+                    auto depth = IsLadderChase(&state, move);
                     if (depth >= cfg_ladder_offense) {
                         value *= 0.01;
                     }
                 }
+                state.undo_move();
             }
         }
 

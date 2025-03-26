@@ -584,70 +584,63 @@ void Network::ladder_update(
 
     int ladder_map[NUM_INTERSECTIONS] = {};
     std::array<float, NUM_INTERSECTIONS> policy = result.policy;
-    auto ladder_check_nodes = cfg_ladder_check_nodes;
     std::stable_sort(rbegin(policy), rend(policy));
+    auto ladder_check_nodes = cfg_ladder_check_nodes;
     for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
         if (policy[i] < cfg_ladder_min_policy) {
             ladder_check_nodes = i;
             break;
         }
     }
-    if (cfg_ladder_check == check_t::SIMPLE) {
-        SimpleLadderDetection(
-            state,
-            ladder_map,
-            result.policy,
-            policy[ladder_check_nodes - 1],
-            ladder_check_nodes);
-    } else {
-        LadderDetection(
-            state,
-            ladder_map,
-            result.policy,
-            policy[ladder_check_nodes - 1],
-            ladder_check_nodes);
+    auto second_policy_i = 0;
+    if (ladder_check_nodes <= 1 && policy[1] < cfg_ladder_min_policy) {
+        auto iter = std::find(result.policy.begin(), result.policy.end(), policy[1]);
+        second_policy_i = std::distance(result.policy.begin(), iter);
     }
-//    auto ladder_defense = cfg_ladder_defense;
-//    auto ladder_offense = cfg_ladder_offense;
-//    if (cfg_ladder_check == check_t::DOUBLE) {
-//        ladder_defense *= 2;
-//        ladder_offense *= 2;
-//    }
+    LadderDetection(
+        state,
+        ladder_map,
+        result.policy,
+        policy[ladder_check_nodes - 1],
+        ladder_check_nodes
+    );
+    auto max_policy_change = false;
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-//        if (ladder_map[i] > 0 && ladder_map[i] >= ladder_defense) {
-        if (ladder_map[i] > 0) {
-#ifdef NDEBUG
+        if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
+#ifndef NDEBUG
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
             auto check_vertex = state->move_to_text(vertex);
-            myprintf_error("escape %s depth:%d(%s)\n", check_vertex.c_str(),
-                ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
+            myprintf_error("escape %s depth:%d(%s)\n", check_vertex.c_str(), ladder_map[i],
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK");
 #endif
+            if (result.policy[i] >= policy[0]) {
+                max_policy_change = true;
+            }
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
                 result.winrate = std::max(0.001f, result.winrate);
             }
-//            result.policy[i] *= 0.0001f;
-//            result.policy[i] *= 0.1f;
-//            result.policy[i] = policy[ladder_check_nodes];
-            result.policy[i] *= std::min(99, ladder_map[i]) / 100;
-//        } else if (ladder_map[i] < 0 && ladder_map[i] <= -ladder_offense) {
-        } else if (ladder_map[i] < 0) {
-#ifdef NDEBUG
+            result.policy[i] = policy[ladder_check_nodes] * 0.5f;
+        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
+#ifndef NDEBUG
+            if (result.policy[i] >= policy[0]) {
+                max_policy_change = true;
+            }
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
             auto check_vertex = state->move_to_text(vertex);
-            myprintf_error("chase %s depth:%d(%s)\n", check_vertex.c_str(),
-                ladder_map[i], state->m_komove != FastBoard::NO_VERTEX ? "Ko": "");
+            myprintf_error("chase %s depth:%d(%s)\n", check_vertex.c_str(), ladder_map[i],
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK");
 #endif
-//            result.policy[i] *= 0.0001f;
-//            result.policy[i] *= 0.1f;
-//            result.policy[i] = policy[ladder_check_nodes];
-            result.policy[i] *= std::min(99, ladder_map[i]) / 100;
+            result.policy[i] = policy[ladder_check_nodes] * 0.5f;
         }
+    }
+    if (max_policy_change && second_policy_i) {
+        result.policy[second_policy_i] = policy[0] * 0.5f;
     }
 }
 
@@ -708,9 +701,7 @@ bool Network::get_output(
         }
     }
 
-//    if (cfg_ladder_check != check_t::PLAYOUT &&
-    if ((cfg_ladder_check == check_t::EVERY ||
-        cfg_ladder_check == check_t::SIMPLE) &&
+    if (cfg_ladder_check == check_t::POLICY &&
         (cfg_ladder_defense > 0 || cfg_ladder_offense > 0)) {
         ladder_update(state, result);
     }
