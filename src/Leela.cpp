@@ -179,8 +179,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "-m0 -t1 -s1.")
         ("trt-cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
-        ("ladder_check", po::value<std::string>()->default_value("simple"),
-                      "Ladder chase check timing. (every/root/playout/simple)")
+        ("ladder_check", po::value<std::string>()->default_value("policy"),
+                      "Ladder chase check timing. (policy/root/playout)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -195,9 +195,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "The rate at which the ladder reduces the winning rate of the board.")
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
-        ("use_recursive_ladder", "Enable recursive ladder check.")
-        ("use_root_escape", "Enable escape ladder check of root.")
-        ("use_root_chase", "Enable chase ladder check of root.")
+        ("root_escape", po::value<int>()->default_value(cfg_root_escape),
+                      "Ladder defense check minimum depth of root.")
+        ("root_chase", po::value<int>()->default_value(cfg_root_chase),
+                      "Ladder offense check minimum depth of root.")
 
       ;
     po::options_description gpu_desc("TensorRT device options");
@@ -211,7 +212,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
         ("unuse_drain_resume", "Disable drain and formula.")
-        ("use_play_recursive", "Enable recursive play simulation.")
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
@@ -374,10 +374,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_use_drain_resume = false;
     }
 
-    if (vm.count("use_play_recursive")) {
-        cfg_play_recursive = true;
-    }
-
     auto trt_cache = vm["trt-cache"].as<std::string>();
     if ("plan" == trt_cache) {
         cfg_cache_plan = true;
@@ -517,14 +513,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_check")) {
         auto ladder_check = vm["ladder_check"].as<std::string>();
-        if (ladder_check == "every") {
-            cfg_ladder_check = check_t::EVERY;
+        if (ladder_check == "policy") {
+            cfg_ladder_check = check_t::POLICY;
         } else if (ladder_check == "root") {
             cfg_ladder_check = check_t::ROOT;
         } else if (ladder_check == "playout") {
             cfg_ladder_check = check_t::PLAYOUT;
-        } else if (ladder_check == "simple") {
-            cfg_ladder_check = check_t::SIMPLE;
         } else {
             printf("Invalid ladder_check value.\n");
             exit(EXIT_FAILURE);
@@ -559,16 +553,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
     }
 
-    if (vm.count("use_recursive_ladder")) {
-        cfg_recursive_ladder = true;
+    if (vm.count("root_escape")) {
+        cfg_root_escape = vm["root_escape"].as<int>();
     }
 
-    if (vm.count("use_root_escape")) {
-        cfg_use_root_escape = true;
-    }
-
-    if (vm.count("use_root_chase")) {
-        cfg_use_root_chase = true;
+    if (vm.count("root_chase")) {
+        cfg_root_chase = vm["root_chase"].as<int>();;
     }
 
     auto out = std::stringstream{};

@@ -83,7 +83,6 @@ bool cfg_dumbpass;
 int cfg_builder_opt_level;
 std::vector<int> cfg_gpus;
 bool cfg_use_drain_resume;
-bool cfg_play_recursive;
 trtLog::Logger cfg_logger{};
 bool cfg_cache_plan;
 precision_t cfg_precision;
@@ -115,9 +114,8 @@ int cfg_offense_stones;
 int cfg_ladder_check_nodes;
 float cfg_ladder_penalty_winrate;
 float cfg_ladder_min_policy;
-bool cfg_recursive_ladder;
-bool cfg_use_root_escape;
-bool cfg_use_root_chase;
+int cfg_root_escape;
+int cfg_root_chase;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -359,7 +357,6 @@ void GTP::setup_default_parameters() {
     cfg_builder_opt_level = 2;     // --builder_opt_level
     cfg_gpus = {};                 // --gpu
     cfg_use_drain_resume = true;   // --unuse_drain_resume
-    cfg_play_recursive = false;    // --use_play_recursive
     cfg_cache_plan = true;         // --trt-cache
 
     cfg_precision = precision_t::AUTO;   // --precision
@@ -389,17 +386,16 @@ void GTP::setup_default_parameters() {
 
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_check = check_t::SIMPLE; // --ladder_check
+    cfg_ladder_check = check_t::POLICY; // --ladder_check
     cfg_ladder_defense = 1;             // --ladder_defense
-    cfg_ladder_offense = 12;            // --ladder_offense
-    cfg_defense_stones = 2;             // --defense_stones
-    cfg_offense_stones = 3;             // --offense_stones
+    cfg_ladder_offense = 30;            // --ladder_offense
+    cfg_defense_stones = 3;             // --defense_stones
+    cfg_offense_stones = 4;             // --offense_stones
     cfg_ladder_check_nodes = 5;         // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
     cfg_ladder_min_policy = 0.005f;     // --ladder_min_policy
-    cfg_recursive_ladder = false;       // --use_recursive_ladder
-    cfg_use_root_escape = false;        // --use_root_escape
-    cfg_use_root_chase = false;         // --use_root_chase
+    cfg_root_escape = 0;                // --root_escape
+    cfg_root_chase = 0;                 // --root_chase
 
     cfg_analyze_tags = AnalyzeTags{};
 
