@@ -280,57 +280,6 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     return result;
 }
 
-SearchResult UCTSearch::play_simulation_recursive(
-    GameState& currstate,
-    UCTNode* const node)
-{
-    auto result = SearchResult{};
-    if (!is_running()) {
-        return result;
-    }
-
-    const auto color = currstate.get_to_move();
-    auto new_node = false;
-
-    node->virtual_loss();
-
-    if (node->expandable()) {
-        if (currstate.get_passes() >= 2) {
-            auto score = currstate.final_score();
-            result = SearchResult::from_score(score);
-        } else {
-            float eval;
-            const auto had_children = node->has_children();
-            const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
-            if (!had_children && success) {
-                result = SearchResult::from_eval(eval);
-                new_node = true;
-            }
-        }
-    }
-
-    if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(currstate, color, node == m_root.get());
-        auto move = next->get_move();
-
-        currstate.play_move(move);
-        if (move != FastBoard::PASS && currstate.superko()) {
-            next->invalidate();
-        } else {
-            result = play_simulation_recursive(currstate, next);
-        }
-    }
-
-    // New node was updated in create_children.
-    if (result.valid() && !new_node) {
-        node->update(result.eval());
-    }
-    node->virtual_loss_undo();
-
-    return result;
-}
-
 void UCTSearch::dump_stats(const FastState& state, UCTNode& parent) {
     if (cfg_quiet || !parent.has_children()) {
         return;
@@ -795,16 +744,6 @@ void UCTWorker::operator()() {
     } while (m_search->is_running());
 }
 
-void UCTWorker_recursive::operator()() {
-    do {
-        auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation_recursive(*currstate, m_root);
-        if (result.valid()) {
-            m_search->increment_playouts();
-        }
-    } while (m_search->is_running());
-}
-
 void UCTSearch::increment_playouts() {
     m_playouts++;
 }
@@ -832,14 +771,8 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     m_run = true;
     int cpus = static_cast<int>(cfg_num_threads);
     ThreadGroup tg(thread_pool);
-    if (cfg_play_recursive) {
-        for (int i = 0; i < cpus; i++) {
-            tg.add_task(UCTWorker_recursive(m_rootstate, this, m_root.get()));
-        }
-    } else {
-        for (int i = 0; i < cpus; i++) {
-            tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
-        }
+    for (int i = 0; i < cpus; i++) {
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
     }
 
     auto keeprunning = true;
