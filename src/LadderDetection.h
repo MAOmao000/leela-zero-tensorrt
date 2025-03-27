@@ -8,8 +8,7 @@
 int IsLadderEscape(
     const GameState* const state,
     const int &str_vtx,
-    const bool &chase = false,
-    std::stack<int> *move_stack = nullptr
+    const bool &chase = false
 );
 
 int IsLadderChase(
