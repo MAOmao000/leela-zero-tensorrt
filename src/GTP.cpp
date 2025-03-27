@@ -388,7 +388,7 @@ void GTP::setup_default_parameters() {
 
     cfg_ladder_check = check_t::POLICY; // --ladder_check
     cfg_ladder_defense = 1;             // --ladder_defense
-    cfg_ladder_offense = 30;            // --ladder_offense
+    cfg_ladder_offense = 7;             // --ladder_offense
     cfg_defense_stones = 3;             // --defense_stones
     cfg_offense_stones = 4;             // --offense_stones
     cfg_ladder_check_nodes = 5;         // --ladder_check_nodes
