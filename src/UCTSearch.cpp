@@ -250,7 +250,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             }
         }
         if (currnode->has_children() && !result.valid()) {
-            auto next = currnode->uct_select_child(currstate, color, currnode == m_root.get());
+            auto next = currnode->uct_select_child(color, currnode == m_root.get());
             auto move = next->get_move();
             currstate.play_move(move);
             if (move != FastBoard::PASS && currstate.superko()) {

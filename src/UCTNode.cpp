@@ -99,11 +99,19 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     std::vector<Network::PolicyVertexPair> nodelist;
 
     auto legal_sum = 0.0f;
+    auto cut_policy = 0.0f;
+    if (cfg_play_style == style_t::STANDARD) {
+        cut_policy = stm_eval * 0.01f;
+    } else if (cfg_play_style == style_t::STABLE) {
+        cut_policy = 0.01f;
+    //} else { // style_t::RISKY
+    //    cut_policy = 0.0f;
+    }
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex)) {
+        if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > cut_policy) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
@@ -301,7 +309,7 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -362,35 +370,6 @@ UCTNode* UCTNode::uct_select_child(GameState& state, const int color, const bool
         const auto puct = cpuct * psa * (numerator / denom);
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
-
-        if (state.m_komove == FastBoard::NO_VERTEX &&
-            cfg_ladder_check == check_t::PLAYOUT) {
-
-            const auto move = child.get_move();
-            if (move != FastBoard::PASS) {
-                state.play_move(state.board.get_to_move(), child->m_move);
-                if (cfg_ladder_defense > 0 &&
-                    state.board.get_string_count(move) >= cfg_defense_stones &&
-                    state.board.get_liberties(move) == 2
-                ) {
-                    auto depth = IsLadderEscape(&state, move);
-                    if (depth <= -cfg_ladder_defense) {
-                        value *= 0.01;
-                    } else if (cfg_ladder_offense > 0) {
-                        depth = IsLadderChase(&state, move);
-                        if (depth >= cfg_ladder_offense) {
-                            value *= 0.01;
-                        }
-                    }
-                } else if (cfg_ladder_offense > 0) {
-                    auto depth = IsLadderChase(&state, move);
-                    if (depth >= cfg_ladder_offense) {
-                        value *= 0.01;
-                    }
-                }
-                state.undo_move();
-            }
-        }
 
         if (value > best_value) {
             best_value = value;
