@@ -143,6 +143,45 @@ public:
     inline int get_parent_stone(int vertex) const {
         return m_parent[vertex];
     }
+    inline void get_bound_num_liberties_after_play(
+        int vertex,
+        vertex_t pla,
+        int& lowerBound,
+        int& upperBound) const
+    {
+        vertex_t opp = static_cast<vertex_t>((pla) ^ 0x01);
+        int numImmediateLibs = 0;
+        int numCaps = 0;
+        int potentialLibsFromCaps = 0;
+        int numConnectionLibs = 0;
+        int maxConnectionLibs = 0;
+        int string_checked[FastBoard::NUM_VERTICES] = {};
+
+        for (auto d = 0; d < 4; d++) {
+            auto n_vtx = get_state_neighbor(vertex, d);
+            if (get_state(n_vtx) == FastBoard::EMPTY) {
+                numImmediateLibs++;
+            } else if (get_state(n_vtx) == opp
+                && !string_checked[get_parent_stone(n_vtx)]) {
+                string_checked[get_parent_stone(n_vtx)] = 1;
+                if (get_liberties(n_vtx) == 1) {
+                    numCaps++;
+                    potentialLibsFromCaps += get_string_count(n_vtx);
+                }
+            } else if (get_state(n_vtx) == pla
+                && !string_checked[get_parent_stone(n_vtx)]) {
+                string_checked[get_parent_stone(n_vtx)] = 1;
+                int connLibs = get_liberties(n_vtx) - 1;
+                numConnectionLibs += connLibs;
+                if (connLibs > maxConnectionLibs) {
+                    maxConnectionLibs = connLibs;
+                }
+            }
+        }
+        lowerBound = numCaps + 
+            (maxConnectionLibs > numImmediateLibs ? maxConnectionLibs : numImmediateLibs);
+        upperBound = numImmediateLibs + potentialLibsFromCaps + numConnectionLibs;
+    }
     inline bool would_be_ko_capture(
         int vertex,
         vertex_t pla) const
@@ -188,6 +227,116 @@ public:
             newpos = get_next_stone(newpos);
         } while (newpos != vertex);
         return false;
+    }
+    inline int get_cut_points(int vertex, int color) const
+    {
+        //vertex_t opp_color = static_cast<vertex_t>((color) ^ 0x01);
+        auto stone_count = 0;
+        auto newpos = vertex;
+        char stone_checked[FastBoard::NUM_VERTICES] = {};
+        char cut_checked[FastBoard::NUM_VERTICES] = {};
+        do {
+            for (int d = 0; d < 4; d++) {
+                auto n_vtx = get_state_neighbor(newpos, d);
+                if (get_state(n_vtx) == color && !stone_checked[n_vtx] ) {
+                    stone_checked[n_vtx] = 1;
+                    if (get_state(n_vtx + BOARD_SIZE) == color) {
+                        // Top left(-:cut point)
+                        //    o x  o -
+                        //    -(o) x(o)
+                        if (get_state(n_vtx - 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx + BOARD_SIZE + 1) == opp_color)
+                            (n_vtx + BOARD_SIZE + 1) == newpos) {
+                            if (!cut_checked[n_vtx - 1]) {
+                                cut_checked[n_vtx - 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        } else if
+                            (get_state(n_vtx + BOARD_SIZE + 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx - 1) == opp_color)) {
+                            (n_vtx - 1) == newpos) {
+                            if (!cut_checked[n_vtx + BOARD_SIZE + 1]) {
+                                cut_checked[n_vtx + BOARD_SIZE + 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        }
+                    }
+                    if (get_state(n_vtx + BOARD_SIZE + 2) == color) {
+                        // Top right(-:cut point)
+                        //    x o  - o
+                        //   (o)- (o)x
+                        if (get_state(n_vtx + 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx + BOARD_SIZE + 1) == opp_color)
+                            (n_vtx + BOARD_SIZE + 1) == newpos) {
+                            if (!cut_checked[n_vtx + 1]) {
+                                cut_checked[n_vtx + 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        } else if
+                            (get_state(n_vtx + BOARD_SIZE + 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx + 1) == opp_color)) {
+                            (n_vtx + 1) == newpos) {
+                            if (!cut_checked[n_vtx + BOARD_SIZE + 1]) {
+                                cut_checked[n_vtx + BOARD_SIZE + 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        }
+                    }
+                    if (get_state(n_vtx - BOARD_SIZE) == color) {
+                        // Bottom right(-:cut point)
+                        //   (o)- (o)x
+                        //    x o  - o
+                        if (get_state(n_vtx + 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx - BOARD_SIZE - 1) == opp_color)
+                            (n_vtx - BOARD_SIZE - 1) == newpos) {
+                            if (!cut_checked[n_vtx + 1]) {
+                                cut_checked[n_vtx + 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        } else if
+                            (get_state(n_vtx - BOARD_SIZE - 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx + 1) == opp_color)) {
+                            (n_vtx + 1) == newpos) {
+                            if (!cut_checked[n_vtx - BOARD_SIZE - 1]) {
+                                cut_checked[n_vtx - BOARD_SIZE - 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        }
+                    }
+                    if (get_state(n_vtx - BOARD_SIZE - 2) == color) {
+                        // Bottom left(-:cut point)
+                        //   -(o) x(o)
+                        //   o x  o -
+                        if (get_state(n_vtx - 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx - BOARD_SIZE - 1) == opp_color)
+                            (n_vtx - BOARD_SIZE - 1) == newpos) {
+                            if (!cut_checked[n_vtx - 1]) {
+                                cut_checked[n_vtx - 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        } else if
+                            (get_state(n_vtx - BOARD_SIZE - 1) == FastBoard::EMPTY &&
+                            //get_state(n_vtx - 1) == opp_color)) {
+                            (n_vtx - 1) == newpos) {
+                            if (!cut_checked[n_vtx - BOARD_SIZE - 1]) {
+                                cut_checked[n_vtx - BOARD_SIZE - 1] = 1;
+                                stone_count++;
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
+            newpos = get_next_stone(newpos);
+        } while (newpos != vertex);
+        return stone_count;
     }
 
 protected:
