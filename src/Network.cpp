@@ -592,11 +592,6 @@ void Network::ladder_update(
             break;
         }
     }
-    auto second_policy_i = 0;
-    if (ladder_check_nodes <= 1 && policy[1] < cfg_ladder_min_policy) {
-        auto iter = std::find(result.policy.begin(), result.policy.end(), policy[1]);
-        second_policy_i = std::distance(result.policy.begin(), iter);
-    }
     LadderDetection(
         state,
         ladder_map,
@@ -604,43 +599,36 @@ void Network::ladder_update(
         policy[ladder_check_nodes - 1],
         ladder_check_nodes
     );
-    auto max_policy_change = false;
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_defense) {
-#ifndef NDEBUG
+        if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
             auto check_vertex = state->move_to_text(vertex);
-            myprintf_error("escape %s depth:%d(%s)\n", check_vertex.c_str(), ladder_map[i],
-                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK");
-#endif
-            if (result.policy[i] >= policy[0]) {
-                max_policy_change = true;
-            }
+            myprintf("escape %s(%s) depth:%d\n", check_vertex.c_str(),
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
+                ladder_map[i]);
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
                 result.winrate = std::max(0.001f, result.winrate);
             }
-            result.policy[i] = policy[ladder_check_nodes] * 0.5f;
-        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_offense) {
-#ifndef NDEBUG
-            if (result.policy[i] >= policy[0]) {
-                max_policy_change = true;
-            }
+            result.policy[i] = -1.0f;
+        } else if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_offense) {
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
             auto check_vertex = state->move_to_text(vertex);
-            myprintf_error("chase %s depth:%d(%s)\n", check_vertex.c_str(), ladder_map[i],
-                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK");
-#endif
-            result.policy[i] = policy[ladder_check_nodes] * 0.5f;
+            myprintf("chase %s(%s) depth:%d\n", check_vertex.c_str(),
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
+                ladder_map[i]);
+            if (cfg_ladder_penalty_winrate > 0.0f) {
+                result.winrate -=
+                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                result.winrate = std::max(0.001f, result.winrate);
+            }
+            result.policy[i] = -1.0f;
         }
-    }
-    if (max_policy_change && second_policy_i) {
-        result.policy[second_policy_i] = policy[0] * 0.5f;
     }
 }
 
@@ -694,15 +682,14 @@ bool Network::get_output(
         return false;
     }
 
-    // v2 format (ELF Open Go) returns black value, not stm
+    // v2 format (ELF Open Go) returns black value, not stm (side to move)
     if (m_value_head_not_stm) {
         if (state->board.get_to_move() == FastBoard::WHITE) {
             result.winrate = 1.0f - result.winrate;
         }
     }
 
-    if (cfg_ladder_check == check_t::POLICY &&
-        (cfg_ladder_defense > 0 || cfg_ladder_offense > 0)) {
+    if (cfg_ladder_defense > 0 || cfg_ladder_offense > 0) {
         ladder_update(state, result);
     }
     if (write_cache) {
