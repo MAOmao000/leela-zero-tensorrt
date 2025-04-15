@@ -106,7 +106,6 @@ std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_use_stdev_uct;
 
-check_t cfg_ladder_check;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
 int cfg_defense_stones;
@@ -114,8 +113,10 @@ int cfg_offense_stones;
 int cfg_ladder_check_nodes;
 float cfg_ladder_penalty_winrate;
 float cfg_ladder_min_policy;
-int cfg_root_escape;
-int cfg_root_chase;
+int cfg_ladder_defense_root;
+int cfg_ladder_offense_root;
+check_t cfg_ladder_offense_check;
+style_t cfg_play_style;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -351,17 +352,17 @@ void GTP::setup_default_parameters() {
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
     cfg_max_cache_ratio_percent = 10;      // fix
     cfg_z_entries = 1000;                  // --z_entries
-    cfg_timemanage = TimeManagement::AUTO; // --timemanage
+    cfg_timemanage = TimeManagement::OFF;  // --timemanage
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
-    cfg_builder_opt_level = 2;     // --builder_opt_level
+    cfg_builder_opt_level = 2;     // --builder_opt_level [0-5]
     cfg_gpus = {};                 // --gpu
     cfg_use_drain_resume = true;   // --unuse_drain_resume
     cfg_cache_plan = true;         // --trt-cache
 
     cfg_precision = precision_t::AUTO;   // --precision
 
-    cfg_puct = 0.9f;               // --puct(No significant difference between 0.5 and 0.8)
+    cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
@@ -386,16 +387,17 @@ void GTP::setup_default_parameters() {
 
     cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_check = check_t::POLICY; // --ladder_check
-    cfg_ladder_defense = 1;             // --ladder_defense
+    cfg_ladder_defense = 8;             // --ladder_defense
     cfg_ladder_offense = 7;             // --ladder_offense
-    cfg_defense_stones = 3;             // --defense_stones
-    cfg_offense_stones = 4;             // --offense_stones
-    cfg_ladder_check_nodes = 5;         // --ladder_check_nodes
+    cfg_defense_stones = 4;             // --defense_stones
+    cfg_offense_stones = 3;             // --offense_stones
+    cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
-    cfg_ladder_min_policy = 0.005f;     // --ladder_min_policy
-    cfg_root_escape = 0;                // --root_escape
-    cfg_root_chase = 0;                 // --root_chase
+    cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
+    cfg_ladder_defense_root = 0;        // --ladder_defense_root
+    cfg_ladder_offense_root = 0;        // --ladder_offense_root
+    cfg_ladder_offense_check = check_t::CUT;  // --ladder_offense_check
+    cfg_play_style = style_t::STANDARD;       // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 

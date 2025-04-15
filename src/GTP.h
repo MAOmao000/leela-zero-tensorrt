@@ -174,10 +174,6 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_use_stdev_uct;
 
-enum class check_t {
-    POLICY, ROOT, PLAYOUT
-};
-extern check_t cfg_ladder_check;
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
@@ -185,8 +181,16 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_check_nodes;
 extern float cfg_ladder_penalty_winrate;
 extern float cfg_ladder_min_policy;
-extern int cfg_root_escape;
-extern int cfg_root_chase;
+extern int cfg_ladder_defense_root;
+extern int cfg_ladder_offense_root;
+enum class check_t {
+    STONES, CUT, CONTINUOUS
+};
+extern check_t cfg_ladder_offense_check;
+enum class style_t {
+    STANDARD, STABLE, RISKY
+};
+extern style_t cfg_play_style;
 
 extern AnalyzeTags cfg_analyze_tags;
 

@@ -167,7 +167,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logfile,l", po::value<std::string>(),
                       "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
-        ("timemanage", po::value<std::string>()->default_value("auto"),
+        ("timemanage", po::value<std::string>()->default_value("off"),
                        "[auto|on|off|fast|no_pruning] Enable time management features.\n"
                        "auto = no_pruning when using -n, otherwise on.\n"
                        "on = Cut off search when the best move can't change"
@@ -179,8 +179,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "-m0 -t1 -s1.")
         ("trt-cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
-        ("ladder_check", po::value<std::string>()->default_value("policy"),
-                      "Ladder chase check timing. (policy/root/playout)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -195,10 +193,14 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "The rate at which the ladder reduces the winning rate of the board.")
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
-        ("root_escape", po::value<int>()->default_value(cfg_root_escape),
+        ("ladder_defense_root", po::value<int>()->default_value(cfg_ladder_defense_root),
                       "Ladder defense check minimum depth of root.")
-        ("root_chase", po::value<int>()->default_value(cfg_root_chase),
+        ("ladder_offense_root", po::value<int>()->default_value(cfg_ladder_offense_root),
                       "Ladder offense check minimum depth of root.")
+        ("ladder_offense_check", po::value<std::string>()->default_value("cut"),
+                      "Ladder offense check pattern (stones/cut/continuous).")
+        ("play_style", po::value<std::string>()->default_value("standard"),
+                      "Leela Zero's play style (standard/stable/risky).")
 
       ;
     po::options_description gpu_desc("TensorRT device options");
@@ -511,20 +513,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // the best if we have introduced noise there exactly to explore more.
     cfg_fpu_root_reduction = cfg_noise ? 0.0f : cfg_fpu_reduction;
 
-    if (vm.count("ladder_check")) {
-        auto ladder_check = vm["ladder_check"].as<std::string>();
-        if (ladder_check == "policy") {
-            cfg_ladder_check = check_t::POLICY;
-        } else if (ladder_check == "root") {
-            cfg_ladder_check = check_t::ROOT;
-        } else if (ladder_check == "playout") {
-            cfg_ladder_check = check_t::PLAYOUT;
-        } else {
-            printf("Invalid ladder_check value.\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
     if (vm.count("ladder_defense")) {
         cfg_ladder_defense = vm["ladder_defense"].as<int>();
     }
@@ -553,12 +541,40 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
     }
 
-    if (vm.count("root_escape")) {
-        cfg_root_escape = vm["root_escape"].as<int>();
+    if (vm.count("ladder_defense_root")) {
+        cfg_ladder_defense_root = vm["ladder_defense_root"].as<int>();
     }
 
-    if (vm.count("root_chase")) {
-        cfg_root_chase = vm["root_chase"].as<int>();;
+    if (vm.count("ladder_offense_root")) {
+        cfg_ladder_offense_root = vm["ladder_offense_root"].as<int>();;
+    }
+
+    if (vm.count("ladder_offense_check")) {
+        auto ladder_offense_check = vm["ladder_offense_check"].as<std::string>();
+        if (ladder_offense_check == "stones") {
+            cfg_ladder_offense_check = check_t::STONES;
+        } else if (ladder_offense_check == "cut") {
+            cfg_ladder_offense_check = check_t::CUT;
+        } else if (ladder_offense_check == "continuous") {
+            cfg_ladder_offense_check = check_t::CONTINUOUS;
+        } else {
+            printf("Invalid ladder_offense_check value.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    if (vm.count("play_style")) {
+        auto play_style = vm["play_style"].as<std::string>();
+        if (play_style == "standard") {
+            cfg_play_style = style_t::STANDARD;
+        } else if (play_style == "stable") {
+            cfg_play_style = style_t::STABLE;
+        } else if (play_style == "risky") {
+            cfg_play_style = style_t::RISKY;
+        } else {
+            printf("Invalid play_style value.\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
     auto out = std::stringstream{};
