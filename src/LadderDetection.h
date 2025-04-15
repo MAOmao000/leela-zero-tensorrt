@@ -1,9 +1,8 @@
 #ifndef _LADDER_DETECTION_H_
 #define _LADDER_DETECTION_H_
 
-#include <stack>
-
 #include "GameState.h"
+#include "GTP.h"
 
 int IsLadderEscape(
     const GameState* const state,
@@ -13,7 +12,8 @@ int IsLadderEscape(
 
 int IsLadderChase(
     const GameState* const state,
-    const int &chase_vtx
+    const int &chase_vtx,
+    const GameState* base_state
 );
 
 void LadderDetection(
