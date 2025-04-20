@@ -528,37 +528,6 @@ int IsLadderChase(
     const auto opponent_color = state->board.get_to_move();
     const auto chase_color = FLIP_COLOR(opponent_color);
 
-    if (cfg_ladder_offense_check == check_t::CONTINUOUS) {
-        auto cur_move = chase_vtx;
-        auto ladder_counter = 0;
-        for (int i = base_state->get_movenum() - 1; i >= 1; i -= 2) {
-            auto prev_move = (base_state->get_game_history()[i])->get_last_move();
-            auto escape_move = (base_state->get_game_history()[i + 1])->get_last_move();
-            if (prev_move > FastBoard::NO_VERTEX
-                && (std::abs(cur_move - prev_move) == BOARD_SIZE - 1
-                || std::abs(cur_move - prev_move) == BOARD_SIZE + 3
-                || std::abs(cur_move - prev_move) == BOARD_SIZE * 2 + 1
-                || std::abs(cur_move - prev_move) == BOARD_SIZE * 2 + 3)
-            ) {
-                if (escape_move == base_state->board.get_state_neighbor(cur_move, 0)
-                    || escape_move == base_state->board.get_state_neighbor(cur_move, 1)
-                    || escape_move == base_state->board.get_state_neighbor(cur_move, 2)
-                    || escape_move == base_state->board.get_state_neighbor(cur_move, 3)
-                ) {
-                    ladder_counter++;
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-            cur_move = prev_move;
-        }
-        if (ladder_counter < cfg_offense_stones) {
-            return 0;
-        }
-    }
-
     // Look for a position where can atari the opponent's stone.
     char ladder_checked[FastBoard::NUM_VERTICES] = {};
     for (auto d = 0; d < 4; d++) {
@@ -578,23 +547,29 @@ int IsLadderChase(
     }
     auto max_depth = 0;
     for (auto opp_i = 0; opp_i < opponent_num; opp_i++) {
-        auto stone_count = 0;
-        if (cfg_ladder_offense_check == check_t::CUT) {
-            if (state->board.get_string_count(chase_vtx) == 1) {
-                stone_count = state->board.get_cut_points(str_vtx[opp_i], chase_color);
+        auto ladder_counter = 0;
+        auto current_move = str_vtx[opp_i];
+        for (int i = base_state->get_movenum(); i >= 0; i -= 2) {
+            auto prev_state = base_state->get_game_history()[i];
+            auto prev_move = prev_state->get_last_move();
+            if (prev_move == str_vtx[opp_i] ||
+                state->board.get_parent_stone(prev_move)
+                    != state->board.get_parent_stone(current_move)) {
+                continue;
             }
-        } else if (cfg_ladder_offense_check == check_t::STONES) {
-            stone_count = state->board.get_string_count(str_vtx[opp_i]);
-        } else { // cfg_ladder_offense_check == check_t::CONTINUOUS
-            stone_count = cfg_offense_stones;
+            if (prev_state->board.get_liberties(prev_move) == 2) {
+                ladder_counter++;
+                current_move = prev_move;
+            } else {
+                break;
+            }
         }
-
-        if (stone_count >= cfg_offense_stones) {
+        if (ladder_counter >= cfg_offense_stones) {
             state->play_move(opponent_color, liberty_vtx[opp_i]);
             if (state->board.get_liberties(liberty_vtx[opp_i]) == 2) {
                 auto depth = IsLadderEscape(state.get(), str_vtx[opp_i], true);
                 if (depth > 0) {
-                    max_depth = std::max(max_depth, depth);
+                    max_depth = std::max(max_depth, depth + ladder_counter);
                 } else {
                     return 0;
                 }
@@ -615,7 +590,6 @@ void LadderDetection(
 {
     auto state = std::make_unique<GameState>(base_state);
     const auto turn_color = state->board.get_to_move();
-    const auto opponent_color = FLIP_COLOR(turn_color);
 
     if (state->m_komove != FastBoard::NO_VERTEX) {
         return;
@@ -637,61 +611,39 @@ void LadderDetection(
         auto capture_count = state->board.get_prisoners(turn_color);
         state->play_move(turn_color, vertex);
         capture_count = state->board.get_prisoners(turn_color) - capture_count;
+        auto stone_count = state->board.get_string_count(vertex);
         if (cfg_ladder_defense > 0 &&
             state->board.get_liberties(vertex) == 2 &&
-            state->board.get_string_count(vertex) > capture_count) {
+            stone_count > capture_count &&
+            stone_count >= cfg_defense_stones) {
 
-            auto ladder_counter = state->board.get_string_count(vertex);
-            auto ladder_continuous = false;
-            if (base_state->get_movenum() >= 3) {
-                auto prev_movenum = base_state->get_movenum();
-                auto prev_move0
-                    = (base_state->get_game_history()[prev_movenum])->get_last_move();
-                auto prev_move1
-                    = (base_state->get_game_history()[prev_movenum - 1])->get_last_move();
-                auto prev_move2
-                    = (base_state->get_game_history()[prev_movenum - 2])->get_last_move();
-                auto prev_move3
-                    = (base_state->get_game_history()[prev_movenum - 3])->get_last_move();
-                if ((std::abs(vertex - prev_move1) == 1
-                    && (prev_move0 == base_state->board.get_state_neighbor(prev_move1, 0)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 1)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 2)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 3))
-                    && std::abs(prev_move1 - prev_move3) == BOARD_SIZE + 1
-                    && (prev_move2 == base_state->board.get_state_neighbor(prev_move3, 0)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 1)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 2)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 3))
-                    )
-                    ||
-                    (std::abs(vertex - prev_move1) == BOARD_SIZE + 1
-                    && (prev_move0 == base_state->board.get_state_neighbor(prev_move1, 0)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 1)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 2)
-                    || prev_move0 == base_state->board.get_state_neighbor(prev_move1, 3))
-                    && std::abs(prev_move1 - prev_move3) == 1
-                    && (prev_move2 == base_state->board.get_state_neighbor(prev_move3, 0)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 1)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 2)
-                    || prev_move2 == base_state->board.get_state_neighbor(prev_move3, 3))
-                    )
-                ){
-                    ladder_continuous = true;
-                }
-            }
-            if (ladder_counter >= cfg_defense_stones || ladder_continuous) {
-                auto depth = IsLadderEscape(state.get(), vertex);
-                if (depth < 0) {
-                    auto move_string = state->move_to_text(vertex);
-                    myprintf("can't escape. %s(%s) depth count:%d(%d) policy:%f\n",
-                        move_string.c_str(),
-                        turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
-                        depth, ladder_counter, policy[i]);
-                    ladder_pos[i] = depth;
-                    state->undo_move();
+            auto ladder_counter = 0;
+            auto current_move = vertex;
+            for (int i = base_state->get_movenum() - 1; i >= 0; i -= 2) {
+                auto prev_state = base_state->get_game_history()[i];
+                auto prev_move = prev_state->get_last_move();
+                if (state->board.get_parent_stone(prev_move)
+                        != state->board.get_parent_stone(current_move)) {
                     continue;
                 }
+                if (prev_state->board.get_liberties(prev_move) == 2) {
+                    ladder_counter++;
+                    current_move = prev_move;
+                } else {
+                    break;
+                }
+            }
+
+            auto depth = IsLadderEscape(state.get(), vertex);
+            if (depth < 0) {
+                auto move_string = state->move_to_text(vertex);
+                myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
+                    move_string.c_str(),
+                    turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
+                    depth, policy[i]);
+                ladder_pos[i] = depth - ladder_counter * 2;
+                state->undo_move();
+                continue;
             }
         }
         if (cfg_ladder_offense < 1 || capture_count) {
