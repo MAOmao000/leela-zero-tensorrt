@@ -99,19 +99,11 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     std::vector<Network::PolicyVertexPair> nodelist;
 
     auto legal_sum = 0.0f;
-    auto cut_policy = 0.0f;
-    if (cfg_play_style == style_t::STANDARD) {
-        cut_policy = stm_eval * 0.01f;
-    } else if (cfg_play_style == style_t::STABLE) {
-        cut_policy = 0.01f;
-    //} else { // style_t::RISKY
-    //    cut_policy = 0.0f;
-    }
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > cut_policy) {
+        if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > 0.0f) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }

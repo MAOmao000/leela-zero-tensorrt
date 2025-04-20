@@ -184,7 +184,6 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
     }
     auto state = std::make_unique<GameState>(base_state);
     const auto turn_color = state->board.get_to_move();
-    const auto opponent_color = turn_color ^ 0x01;
     for (const auto& child : m_children) {
         if (child->m_move != FastBoard::PASS
             && !state->board.is_eye(state->board.get_to_move(), child->m_move)) {
@@ -195,56 +194,33 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
             auto stone_count = state->board.get_string_count(child->m_move);
             if (cfg_ladder_defense_root > 0 &&
                 state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count) {
+                stone_count > capture_count &&
+                stone_count >= cfg_defense_stones) {
 
-                auto ladder_continuous = false;
-                if (base_state.get_movenum() >= 3) {
-                    auto prev_movenum = base_state.get_movenum();
-                    auto prev_move0
-                        = (base_state.get_game_history()[prev_movenum])->get_last_move();
-                    auto prev_move1
-                        = (base_state.get_game_history()[prev_movenum - 1])->get_last_move();
-                    auto prev_move2
-                        = (base_state.get_game_history()[prev_movenum - 2])->get_last_move();
-                    auto prev_move3
-                        = (base_state.get_game_history()[prev_movenum - 3])->get_last_move();
-                    if ((std::abs(child->m_move - prev_move1) == 1
-                        && (prev_move0 == base_state.board.get_state_neighbor(prev_move1, 0)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 1)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 2)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 3))
-                        && std::abs(prev_move1 - prev_move3) == BOARD_SIZE + 1
-                        && (prev_move2 == base_state.board.get_state_neighbor(prev_move3, 0)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 1)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 2)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 3))
-                        )
-                        ||
-                        (std::abs(child->m_move - prev_move1) == BOARD_SIZE + 1
-                        && (prev_move0 == base_state.board.get_state_neighbor(prev_move1, 0)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 1)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 2)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 3))
-                        && std::abs(prev_move1 - prev_move3) == 1
-                        && (prev_move2 == base_state.board.get_state_neighbor(prev_move3, 0)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 1)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 2)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 3))
-                        )
-                    ){
-                        ladder_continuous = true;
+                auto ladder_counter = 0;
+                auto current_move = child->m_move;
+                for (int i = base_state.get_movenum() - 1; i >= 0; i -= 2) {
+                    auto prev_state = base_state.get_game_history()[i];
+                    auto prev_move = prev_state->get_last_move();
+                    if (state->board.get_parent_stone(prev_move)
+                        != state->board.get_parent_stone(current_move)) {
+                        continue;
+                    }
+                    if (prev_state->board.get_liberties(prev_move) == 2) {
+                        ladder_counter++;
+                        current_move = prev_move;
+                    } else {
+                        break;
                     }
                 }
 
-                if (stone_count >= cfg_defense_stones || ladder_continuous) {
-                    auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (-depth >= cfg_ladder_defense_root) {
-                        auto check_vertex = state->move_to_text(child->m_move);
-                        Utils::myprintf("can't escape. %s depth count:%d\n",
-                            check_vertex.c_str(), -depth);
-                        state->undo_move();
-                        continue;
-                    }
+                auto depth = IsLadderEscape(state.get(), child->m_move);
+                if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                    auto check_vertex = state->move_to_text(child->m_move);
+                    Utils::myprintf("can't escape. %s depth count:%d\n",
+                        check_vertex.c_str(), -depth);
+                    state->undo_move();
+                    continue;
                 }
             }
             if (cfg_ladder_offense_root > 0 && !capture_count) {
@@ -328,7 +304,6 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
     }
     auto state = std::make_unique<GameState>(base_state);
     const auto turn_color = state->board.get_to_move();
-    const auto opponent_color = turn_color ^ 0x01;
     for (const auto& child : m_children) {
         if (child->m_move == FastBoard::PASS) {
             return child.get();
@@ -339,56 +314,33 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
             auto stone_count = state->board.get_string_count(child->m_move);
             if (cfg_ladder_defense_root > 0 &&
                 state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count) {
+                stone_count > capture_count &&
+                stone_count >= cfg_defense_stones) {
 
-                auto ladder_continuous = false;
-                if (base_state.get_movenum() >= 3) {
-                    auto prev_movenum = base_state.get_movenum();
-                    auto prev_move0
-                        = (base_state.get_game_history()[prev_movenum])->get_last_move();
-                    auto prev_move1
-                        = (base_state.get_game_history()[prev_movenum - 1])->get_last_move();
-                    auto prev_move2
-                        = (base_state.get_game_history()[prev_movenum - 2])->get_last_move();
-                    auto prev_move3
-                        = (base_state.get_game_history()[prev_movenum - 3])->get_last_move();
-                    if ((std::abs(child->m_move - prev_move1) == 1
-                        && (prev_move0 == base_state.board.get_state_neighbor(prev_move1, 0)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 1)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 2)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 3))
-                        && std::abs(prev_move1 - prev_move3) == BOARD_SIZE + 1
-                        && (prev_move2 == base_state.board.get_state_neighbor(prev_move3, 0)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 1)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 2)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 3))
-                        )
-                        ||
-                        (std::abs(child->m_move - prev_move1) == BOARD_SIZE + 1
-                        && (prev_move0 == base_state.board.get_state_neighbor(prev_move1, 0)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 1)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 2)
-                        || prev_move0 == base_state.board.get_state_neighbor(prev_move1, 3))
-                        && std::abs(prev_move1 - prev_move3) == 1
-                        && (prev_move2 == base_state.board.get_state_neighbor(prev_move3, 0)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 1)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 2)
-                        || prev_move2 == base_state.board.get_state_neighbor(prev_move3, 3))
-                        )
-                    ){
-                        ladder_continuous = true;
+                auto ladder_counter = 0;
+                auto current_move = child->m_move;
+                for (int i = base_state.get_movenum() - 1; i >= 0; i -= 2) {
+                    auto prev_state = base_state.get_game_history()[i];
+                    auto prev_move = prev_state->get_last_move();
+                    if (state->board.get_parent_stone(prev_move)
+                        != state->board.get_parent_stone(current_move)) {
+                        continue;
+                    }
+                    if (prev_state->board.get_liberties(prev_move) == 2) {
+                        ladder_counter++;
+                        current_move = prev_move;
+                    } else {
+                        break;
                     }
                 }
 
-                if (stone_count >= cfg_defense_stones || ladder_continuous) {
-                    auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (-depth >= cfg_ladder_defense_root) {
-                        auto check_vertex = state->move_to_text(child->m_move);
-                        Utils::myprintf("can't escape. %s depth count:%d\n",
-                            check_vertex.c_str(), -depth);
-                        state->undo_move();
-                        continue;
-                    }
+                auto depth = IsLadderEscape(state.get(), child->m_move);
+                if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                    auto check_vertex = state->move_to_text(child->m_move);
+                    Utils::myprintf("can't escape. %s depth count:%d\n",
+                        check_vertex.c_str(), -depth);
+                    state->undo_move();
+                    continue;
                 }
             }
             if (cfg_ladder_offense_root > 0 && !capture_count) {

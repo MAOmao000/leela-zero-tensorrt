@@ -183,10 +183,7 @@ extern float cfg_ladder_penalty_winrate;
 extern float cfg_ladder_min_policy;
 extern int cfg_ladder_defense_root;
 extern int cfg_ladder_offense_root;
-enum class check_t {
-    STONES, CUT, CONTINUOUS
-};
-extern check_t cfg_ladder_offense_check;
+extern float cfg_cut_policy;
 enum class style_t {
     STANDARD, STABLE, RISKY
 };

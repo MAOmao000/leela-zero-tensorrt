@@ -586,8 +586,19 @@ void Network::ladder_update(
     std::array<float, NUM_INTERSECTIONS> policy = result.policy;
     std::stable_sort(rbegin(policy), rend(policy));
     auto ladder_check_nodes = cfg_ladder_check_nodes;
+    auto cut_policy = 0.0f;
+    if (policy[0] <= 0.9f && policy[1] > result.policy_pass) {
+        if (cfg_play_style == style_t::STANDARD) {
+            cut_policy = result.winrate * cfg_cut_policy;
+        } else if (cfg_play_style == style_t::STABLE) {
+            cut_policy = cfg_cut_policy;
+        //} else { // style_t::RISKY
+        //    cut_policy = 0.0f;
+        }
+    }
+    auto min_policy = std::max(cut_policy, cfg_ladder_min_policy);
     for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
-        if (policy[i] < cfg_ladder_min_policy) {
+        if (policy[i] < min_policy) {
             ladder_check_nodes = i;
             break;
         }
@@ -600,7 +611,9 @@ void Network::ladder_update(
         ladder_check_nodes
     );
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
+        if (result.policy[i] <= cut_policy) {
+            result.policy[i] = -1.0f;
+        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);

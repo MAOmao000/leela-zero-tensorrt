@@ -197,8 +197,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder defense check minimum depth of root.")
         ("ladder_offense_root", po::value<int>()->default_value(cfg_ladder_offense_root),
                       "Ladder offense check minimum depth of root.")
-        ("ladder_offense_check", po::value<std::string>()->default_value("cut"),
-                      "Ladder offense check pattern (stones/cut/continuous).")
+        ("cut_policy", po::value<float>(),
+                      "Minimum policy when creating UCT nodes.")
         ("play_style", po::value<std::string>()->default_value("standard"),
                       "Leela Zero's play style (standard/stable/risky).")
 
@@ -549,18 +549,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_offense_root = vm["ladder_offense_root"].as<int>();;
     }
 
-    if (vm.count("ladder_offense_check")) {
-        auto ladder_offense_check = vm["ladder_offense_check"].as<std::string>();
-        if (ladder_offense_check == "stones") {
-            cfg_ladder_offense_check = check_t::STONES;
-        } else if (ladder_offense_check == "cut") {
-            cfg_ladder_offense_check = check_t::CUT;
-        } else if (ladder_offense_check == "continuous") {
-            cfg_ladder_offense_check = check_t::CONTINUOUS;
-        } else {
-            printf("Invalid ladder_offense_check value.\n");
-            exit(EXIT_FAILURE);
-        }
+    if (vm.count("cut_policy")) {
+        cfg_cut_policy = vm["cut_policy"].as<float>();
     }
 
     if (vm.count("play_style")) {

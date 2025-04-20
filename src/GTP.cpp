@@ -115,7 +115,7 @@ float cfg_ladder_penalty_winrate;
 float cfg_ladder_min_policy;
 int cfg_ladder_defense_root;
 int cfg_ladder_offense_root;
-check_t cfg_ladder_offense_check;
+float cfg_cut_policy;
 style_t cfg_play_style;
 
 AnalyzeTags cfg_analyze_tags;
@@ -389,15 +389,15 @@ void GTP::setup_default_parameters() {
 
     cfg_ladder_defense = 8;             // --ladder_defense
     cfg_ladder_offense = 7;             // --ladder_offense
-    cfg_defense_stones = 4;             // --defense_stones
-    cfg_offense_stones = 3;             // --offense_stones
+    cfg_defense_stones = 5;             // --defense_stones
+    cfg_offense_stones = 5;             // --offense_stones
     cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root
-    cfg_ladder_offense_check = check_t::CUT;  // --ladder_offense_check
-    cfg_play_style = style_t::STANDARD;       // --play_style
+    cfg_cut_policy = 0.01f;             // --cut_policy
+    cfg_play_style = style_t::STANDARD; // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 
