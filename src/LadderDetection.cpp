@@ -614,8 +614,7 @@ void LadderDetection(
         auto stone_count = state->board.get_string_count(vertex);
         if (cfg_ladder_defense > 0 &&
             state->board.get_liberties(vertex) == 2 &&
-            stone_count > capture_count &&
-            stone_count >= cfg_defense_stones) {
+            stone_count > capture_count) {
 
             auto ladder_counter = 0;
             auto current_move = vertex;
@@ -634,16 +633,18 @@ void LadderDetection(
                 }
             }
 
-            auto depth = IsLadderEscape(state.get(), vertex);
-            if (depth < 0) {
-                auto move_string = state->move_to_text(vertex);
-                myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
-                    move_string.c_str(),
-                    turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
-                    depth, policy[i]);
-                ladder_pos[i] = depth - ladder_counter * 2;
-                state->undo_move();
-                continue;
+            if (stone_count >= cfg_defense_stones || ladder_counter) {
+                auto depth = IsLadderEscape(state.get(), vertex);
+                if (depth < 0) {
+                    auto move_string = state->move_to_text(vertex);
+                    myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
+                        move_string.c_str(),
+                        turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
+                        depth, policy[i]);
+                    ladder_pos[i] = depth - ladder_counter * 2;
+                    state->undo_move();
+                    continue;
+                }
             }
         }
         if (cfg_ladder_offense < 1 || capture_count) {

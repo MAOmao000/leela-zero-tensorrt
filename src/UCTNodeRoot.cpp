@@ -194,8 +194,7 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
             auto stone_count = state->board.get_string_count(child->m_move);
             if (cfg_ladder_defense_root > 0 &&
                 state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count &&
-                stone_count >= cfg_defense_stones) {
+                stone_count > capture_count) {
 
                 auto ladder_counter = 0;
                 auto current_move = child->m_move;
@@ -214,13 +213,15 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
                     }
                 }
 
-                auto depth = IsLadderEscape(state.get(), child->m_move);
-                if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
-                    auto check_vertex = state->move_to_text(child->m_move);
-                    Utils::myprintf("can't escape. %s depth count:%d\n",
-                        check_vertex.c_str(), -depth);
-                    state->undo_move();
-                    continue;
+                if (stone_count >= cfg_defense_stones || ladder_counter) {
+                    auto depth = IsLadderEscape(state.get(), child->m_move);
+                    if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                        auto check_vertex = state->move_to_text(child->m_move);
+                        Utils::myprintf("can't escape. %s depth count:%d\n",
+                            check_vertex.c_str(), -depth);
+                        state->undo_move();
+                        continue;
+                    }
                 }
             }
             if (cfg_ladder_offense_root > 0 && !capture_count) {
@@ -314,8 +315,7 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
             auto stone_count = state->board.get_string_count(child->m_move);
             if (cfg_ladder_defense_root > 0 &&
                 state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count &&
-                stone_count >= cfg_defense_stones) {
+                stone_count > capture_count) {
 
                 auto ladder_counter = 0;
                 auto current_move = child->m_move;
@@ -334,13 +334,15 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
                     }
                 }
 
-                auto depth = IsLadderEscape(state.get(), child->m_move);
-                if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
-                    auto check_vertex = state->move_to_text(child->m_move);
-                    Utils::myprintf("can't escape. %s depth count:%d\n",
-                        check_vertex.c_str(), -depth);
-                    state->undo_move();
-                    continue;
+                if (stone_count >= cfg_defense_stones || ladder_counter) {
+                    auto depth = IsLadderEscape(state.get(), child->m_move);
+                    if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                        auto check_vertex = state->move_to_text(child->m_move);
+                        Utils::myprintf("can't escape. %s depth count:%d\n",
+                            check_vertex.c_str(), -depth);
+                        state->undo_move();
+                        continue;
+                    }
                 }
             }
             if (cfg_ladder_offense_root > 0 && !capture_count) {
