@@ -213,7 +213,7 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
                     }
                 }
 
-                if (stone_count >= cfg_defense_stones || ladder_counter) {
+                if (stone_count >= cfg_defense_stones) {
                     auto depth = IsLadderEscape(state.get(), child->m_move);
                     if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
                         auto check_vertex = state->move_to_text(child->m_move);
@@ -334,7 +334,7 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
                     }
                 }
 
-                if (stone_count >= cfg_defense_stones || ladder_counter) {
+                if (stone_count >= cfg_defense_stones) {
                     auto depth = IsLadderEscape(state.get(), child->m_move);
                     if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
                         auto check_vertex = state->move_to_text(child->m_move);

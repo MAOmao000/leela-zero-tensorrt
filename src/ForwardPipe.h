@@ -87,7 +87,6 @@ public:
 
     virtual void drain() {}
     virtual void resume() {}
-    virtual void forward_queue_clear() {}
 };
 
 #endif

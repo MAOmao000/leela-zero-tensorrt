@@ -106,13 +106,18 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
+#ifdef _WIN32
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
-            // no idea why somebody wants to use threads less than the number of GPUs
-            // but should at least prevent crashing
+#else
+            cfg_batch_size =
+                (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 2);
             if (cfg_batch_size > cfg_num_threads) {
                 cfg_batch_size = std::min(cfg_num_threads / 2, size_t{1});
             }
+#endif
+            // no idea why somebody wants to use threads less than the number of GPUs
+            // but should at least prevent crashing
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
@@ -125,15 +130,26 @@ static void calculate_thread_count_gpu(
             if (cfg_max_threads < 4) {
                 cfg_batch_size = 1;
             } else {
-                cfg_batch_size = cfg_num_threads * (cfg_max_threads / 2 - 1) / (cfg_max_threads / 2);
+#ifdef _WIN32
+                cfg_batch_size =
+                    cfg_num_threads * (cfg_max_threads / 2 - 1) / cfg_max_threads;
+#else
+                cfg_batch_size =
+                    cfg_num_threads * (cfg_max_threads / 2 - 1) / (cfg_max_threads / 2);
+#endif
             }
 
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
+#ifdef _WIN32
+        cfg_num_threads =
+            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+#else
         cfg_num_threads =
             std::min(cfg_max_threads, cfg_batch_size * gpu_count);
+#endif
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -167,7 +183,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logfile,l", po::value<std::string>(),
                       "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
-        ("timemanage", po::value<std::string>()->default_value("off"),
+        ("timemanage", po::value<std::string>()->default_value("auto"),
                        "[auto|on|off|fast|no_pruning] Enable time management features.\n"
                        "auto = no_pruning when using -n, otherwise on.\n"
                        "on = Cut off search when the best move can't change"
@@ -213,7 +229,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Wait time milliseconds for full batch.")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
-        ("unuse_drain_resume", "Disable drain and formula.")
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
@@ -243,8 +258,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("fpu_reduction", po::value<float>())
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
-        ("lcb_visits_ratio", po::value<float>())
-        ("unuse_stdev_uct", "Disable sample variance in UCT formula.");
+        ("lcb_visits_ratio", po::value<float>());
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
     po::options_description ignore("Ignored options");
@@ -337,9 +351,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("lcb_visits_ratio")) {
         cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
     }
-    if (vm.count("unuse_stdev_uct")) {
-        cfg_use_stdev_uct = false;
-    }
 
     if (vm.count("logfile")) {
         cfg_logfile = vm["logfile"].as<std::string>();
@@ -370,10 +381,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("builder_opt_level")) {
         cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
-    }
-
-    if (vm.count("unuse_drain_resume")) {
-        cfg_use_drain_resume = false;
     }
 
     auto trt_cache = vm["trt-cache"].as<std::string>();

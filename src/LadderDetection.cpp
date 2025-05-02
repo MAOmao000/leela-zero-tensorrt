@@ -526,7 +526,6 @@ int IsLadderChase(
     std::array<int, 4> liberty_vtx = {-1, -1, -1, -1};
     auto opponent_num = 0;
     const auto opponent_color = state->board.get_to_move();
-    const auto chase_color = FLIP_COLOR(opponent_color);
 
     // Look for a position where can atari the opponent's stone.
     char ladder_checked[FastBoard::NUM_VERTICES] = {};
@@ -633,7 +632,7 @@ void LadderDetection(
                 }
             }
 
-            if (stone_count >= cfg_defense_stones || ladder_counter) {
+            if (stone_count >= cfg_defense_stones) {
                 auto depth = IsLadderEscape(state.get(), vertex);
                 if (depth < 0) {
                     auto move_string = state->move_to_text(vertex);

@@ -95,8 +95,6 @@ public:
     // Flag the network to be open for business.
     virtual void resume_evals();
 
-    virtual void forward_queue_clear();
-
     NetworkType get_network_type() {
         return m_net_type;
     }

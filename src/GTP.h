@@ -143,7 +143,6 @@ extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
 extern int cfg_builder_opt_level;
 extern std::vector<int> cfg_gpus;
-extern bool cfg_use_drain_resume;
 extern trtLog::Logger cfg_logger;
 enum class trtcache_t {
     PLAN, TIMING
@@ -172,7 +171,6 @@ extern FILE* cfg_logfile_handle;
 extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
-extern bool cfg_use_stdev_uct;
 
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;

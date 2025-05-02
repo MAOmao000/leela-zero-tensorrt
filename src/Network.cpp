@@ -941,7 +941,3 @@ void Network::drain_evals() {
 void Network::resume_evals() {
     m_forward->resume();
 }
-
-void Network::forward_queue_clear() {
-    m_forward->forward_queue_clear();
-}

@@ -319,7 +319,7 @@ bool GPUScheduler<net_t>::forward(
     m_cv.notify_one();
     entry->cv.wait(lk);
 
-    if (cfg_use_drain_resume && m_draining) {
+    if (m_draining) {
         return false;
     }
     return true;
@@ -395,7 +395,7 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
-        if (!cfg_use_drain_resume || !m_draining) {
+        if (!m_draining) {
             // run the NN evaluation
             m_backend[gnum]->forward(
                 batch_input,
@@ -435,13 +435,6 @@ void GPUScheduler<net_t>::resume()
 {
     // UCTNode::think() should wait for all child threads to complete before resuming.
     m_draining = false;
-}
-
-template <typename net_t>
-void GPUScheduler<net_t>::forward_queue_clear()
-{
-    std::unique_lock<std::mutex> lk(m_mutex);
-    m_forward_queue.clear();
 }
 
 template class GPUScheduler<float>;

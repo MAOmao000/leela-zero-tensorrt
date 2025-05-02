@@ -343,18 +343,16 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             winrate = child.get_eval(color);
         }
         auto stdev = 1.0f;
-        if (cfg_use_stdev_uct) {
-            // See
-            // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            if (child.get_visits() > 1) {
-                auto variance = child.get_eval_variance(1.0f);
-                auto stddev = std::sqrt(variance);
-                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
-                k = std::max(0.5f, k);
-                k = std::min(1.4f, k);
-                auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
-                stdev = alpha * k + (1.0f - alpha) * 1.0f;
-            }
+        // See
+        // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
+        if (child.get_visits() > 1) {
+            auto variance = child.get_eval_variance(1.0f);
+            auto stddev = std::sqrt(variance);
+            auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
+            k = std::max(0.5f, k);
+            k = std::min(1.4f, k);
+            auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
+            stdev = alpha * k + (1.0f - alpha) * 1.0f;
         }
         const auto cpuct = cfg_puct * stdev;
         const auto psa = child.get_policy();

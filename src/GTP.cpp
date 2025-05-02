@@ -82,7 +82,6 @@ std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
 int cfg_builder_opt_level;
 std::vector<int> cfg_gpus;
-bool cfg_use_drain_resume;
 trtLog::Logger cfg_logger{};
 bool cfg_cache_plan;
 precision_t cfg_precision;
@@ -104,7 +103,6 @@ FILE* cfg_logfile_handle;
 bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
-bool cfg_use_stdev_uct;
 
 int cfg_ladder_defense;
 int cfg_ladder_offense;
@@ -352,17 +350,16 @@ void GTP::setup_default_parameters() {
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
     cfg_max_cache_ratio_percent = 10;      // fix
     cfg_z_entries = 1000;                  // --z_entries
-    cfg_timemanage = TimeManagement::OFF;  // --timemanage
+    cfg_timemanage = TimeManagement::AUTO; // --timemanage
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
     cfg_builder_opt_level = 2;     // --builder_opt_level [0-5]
     cfg_gpus = {};                 // --gpu
-    cfg_use_drain_resume = true;   // --unuse_drain_resume
     cfg_cache_plan = true;         // --trt-cache
 
     cfg_precision = precision_t::AUTO;   // --precision
 
-    cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
+    cfg_puct = 0.5f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
@@ -385,19 +382,17 @@ void GTP::setup_default_parameters() {
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
 
-    cfg_use_stdev_uct = true;        // --unuse_stdev_uct
-
-    cfg_ladder_defense = 8;             // --ladder_defense
-    cfg_ladder_offense = 7;             // --ladder_offense
-    cfg_defense_stones = 5;             // --defense_stones
-    cfg_offense_stones = 5;             // --offense_stones
+    cfg_ladder_defense = 9;             // --ladder_defense
+    cfg_ladder_offense = 8;             // --ladder_offense
+    cfg_defense_stones = 4;             // --defense_stones
+    cfg_offense_stones = 4;             // --offense_stones
     cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
     cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root
     cfg_cut_policy = 0.01f;             // --cut_policy
-    cfg_play_style = style_t::STANDARD; // --play_style
+    cfg_play_style = style_t::STABLE;   // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -608,12 +603,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
-        s_network->forward_queue_clear();
-        s_network->nncache_clear();
         Training::clear_training();
-        auto rng = std::make_unique<Random>(5489);
-        Zobrist::init_zobrist(*rng);
-        Random::get_Rng().seedrandom(cfg_rng_seed);
         game.reset_game();
         search = std::make_unique<UCTSearch>(game, *s_network);
         assert(UCTNodePointer::get_tree_size() == 0);
