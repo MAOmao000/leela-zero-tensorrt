@@ -106,8 +106,7 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size =
-                (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
+            cfg_batch_size = cfg_num_threads;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -123,14 +122,14 @@ static void calculate_thread_count_gpu(
                 cfg_batch_size = 1;
             } else {
                 cfg_batch_size =
-                    cfg_num_threads * (cfg_max_threads / 2 - 1) / cfg_max_threads;
+                    cfg_num_threads * (cfg_num_threads / 2 - 1) / (cfg_num_threads / 2);
             }
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
         cfg_num_threads =
-            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+            std::min(cfg_num_threads, cfg_batch_size * gpu_count);
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
