@@ -106,7 +106,7 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size = cfg_num_threads;
+            cfg_batch_size = (cfg_num_threads + (gpu_count * 1) - 1) / gpu_count;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {

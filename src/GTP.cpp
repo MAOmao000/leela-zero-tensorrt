@@ -54,8 +54,6 @@
 #include "Training.h"
 #include "UCTSearch.h"
 #include "Utils.h"
-#include "Random.h"
-#include "Zobrist.h"
 
 using namespace Utils;
 

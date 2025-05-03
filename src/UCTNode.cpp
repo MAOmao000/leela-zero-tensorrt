@@ -49,7 +49,6 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
-#include "LadderDetection.h"
 
 using namespace Utils;
 
