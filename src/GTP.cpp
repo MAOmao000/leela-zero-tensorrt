@@ -883,26 +883,29 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         cmdstream >> tmp; // eat heatmap
         cmdstream >> symmetry;
 
+        bool ret;
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
-                                  Network::IDENTITY_SYMMETRY, false);
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                        Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
-                                      false);
-                Network::show_heatmap(&game, vec, false);
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
+                                            false);
+                if (ret) {
+                    Network::show_heatmap(&game, vec, false);
+                }
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
-                                  false);
+            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
+                                        false);
         } else {
-            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
-                                  std::stoi(symmetry), false);
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                        std::stoi(symmetry), false);
         }
 
-        if (symmetry != "all") {
+        if (symmetry != "all" && ret) {
             Network::show_heatmap(&game, vec, false);
         }
 
