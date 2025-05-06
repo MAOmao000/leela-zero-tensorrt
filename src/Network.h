@@ -60,9 +60,9 @@ public:
     using PolicyVertexPair = std::pair<float, int>;
     using Netresult = NNCache::Netresult;
 
-    virtual ~Network() = default;
+    ~Network() = default;
 
-    bool get_output(const GameState* state, Ensemble ensemble,
+    bool get_output(const GameState* state, const Ensemble ensemble,
                     Network::Netresult& result,
                     const int symmetry = -1, const bool read_cache = true,
                     const bool write_cache = true);
@@ -90,10 +90,10 @@ public:
     void nncache_resize(int max_count);
     void nncache_clear();
 
-    virtual void drain_evals();
+    void drain_evals();
 
     // Flag the network to be open for business.
-    virtual void resume_evals();
+    void resume_evals();
 
     NetworkType get_network_type() {
         return m_net_type;
