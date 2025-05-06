@@ -31,7 +31,6 @@
 
 #include <algorithm>
 #include <boost/format.hpp>
-#include <boost/scope_exit.hpp>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -480,7 +479,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
         m_root->randomize_first_proportionally();
     }
 
-    auto first_child = m_root->get_noladder_child(m_rootstate);;
+    auto first_child = m_root->get_noladder_child(m_rootstate);
     assert(first_child != nullptr);
 
     auto bestmove = first_child->get_move();
@@ -730,7 +729,8 @@ bool UCTSearch::have_alternate_moves(const int elapsed_centis,
 
 bool UCTSearch::stop_thinking(const int elapsed_centis,
                               const int time_for_move) const {
-    return m_playouts >= m_maxplayouts || m_root->get_visits() >= m_maxvisits
+    return m_playouts >= m_maxplayouts
+           || m_root->get_visits() >= m_maxvisits
            || elapsed_centis >= time_for_move;
 }
 
