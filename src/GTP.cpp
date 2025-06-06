@@ -63,6 +63,9 @@ bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
 int cfg_batch_wait_time;
+int cfg_search_monitor_interval;
+bool cfg_analysis_thread;
+bool cfg_fixed_batch;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -336,10 +339,13 @@ void GTP::setup_default_parameters() {
     cfg_allow_pondering = true; // --noponder
 
     // we will re-calculate this on Leela.cpp
-    cfg_num_threads = 1;        // -t, --threads
+    cfg_num_threads = 1;              // -t, --threads
     // we will re-calculate this on Leela.cpp
-    cfg_batch_size = 1;         // --batchsize
-    cfg_batch_wait_time = 20;   // --batchwait
+    cfg_batch_size = 1;               // --batchsize
+    cfg_batch_wait_time = 6;          // --batchwait
+    cfg_search_monitor_interval = 5;  // --search_monitor_interval
+    cfg_analysis_thread = false;      // --analysis_thread
+    cfg_fixed_batch = false;          // --trt_batch
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -353,7 +359,7 @@ void GTP::setup_default_parameters() {
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
     cfg_builder_opt_level = 2;     // --builder_opt_level [0-5]
     cfg_gpus = {};                 // --gpu
-    cfg_cache_plan = true;         // --trt-cache
+    cfg_cache_plan = true;         // --trt_cache
 
     cfg_precision = precision_t::AUTO;   // --precision
 
@@ -380,7 +386,7 @@ void GTP::setup_default_parameters() {
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
 
-    cfg_ladder_defense = 9;             // --ladder_defense
+    cfg_ladder_defense = 7;             // --ladder_defense
     cfg_ladder_offense = 8;             // --ladder_offense
     cfg_defense_stones = 4;             // --defense_stones
     cfg_offense_stones = 4;             // --offense_stones

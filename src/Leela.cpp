@@ -173,7 +173,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("noponder", "Disable thinking on opponent's time.")
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
-        ("trt-cache", po::value<std::string>()->default_value("plan"),
+        ("trt_cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
@@ -206,7 +206,13 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
         ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
-                      "Wait time milliseconds for full batch.")
+                      "Wait time (milli seconds) for full batch.")
+        ("search_monitor_interval", po::value<int>()->default_value(cfg_search_monitor_interval),
+                      "Search monitoring interval time (milli seconds).")
+        ("analysis_thread", po::value<std::string>()->default_value("nonthread"),
+                      "Which to use: analysis thread? (thread/nonthread)")
+        ("trt_batch", po::value<std::string>()->default_value("variable"),
+                      "Which to use: fixed batch or variable batch? (fixed/variable)")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
         ("precision", po::value<std::string>(),
@@ -359,19 +365,44 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_batch_wait_time = vm["batchwait"].as<int>();
     }
 
+    if (vm.count("search_monitor_interval")) {
+        cfg_search_monitor_interval = vm["search_monitor_interval"].as<int>();
+    }
+
+    auto trt_batch = vm["trt_batch"].as<std::string>();
+    if ("fixed" == trt_batch) {
+        cfg_fixed_batch = true;
+    } else if ("variable" == trt_batch) {
+        cfg_fixed_batch = false;
+    } else {
+        printf("Unexpected option for --trt_batch, expecting fixed/variable.\n");
+        exit(EXIT_FAILURE);
+    }
+
     if (vm.count("builder_opt_level")) {
         cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
     }
 
-    auto trt_cache = vm["trt-cache"].as<std::string>();
+    auto analysis_thread = vm["analysis_thread"].as<std::string>();
+    if ("thread" == analysis_thread) {
+        cfg_analysis_thread = true;
+    } else if ("nonthread" == analysis_thread) {
+        cfg_analysis_thread = false;
+    } else {
+        printf("Unexpected option for --analysis_thread, nonthread/thread.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    auto trt_cache = vm["trt_cache"].as<std::string>();
     if ("plan" == trt_cache) {
         cfg_cache_plan = true;
     } else if ("timing" == trt_cache) {
         cfg_cache_plan = false;
     } else {
-        printf("Unexpected option for --trt-cache, expecting plan/timing.\n");
+        printf("Unexpected option for --trt_cache, expecting plan/timing.\n");
         exit(EXIT_FAILURE);
     }
+
     calculate_thread_count_gpu(vm);
     myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
     myprintf("Using %d thread(s).\n", cfg_num_threads);
