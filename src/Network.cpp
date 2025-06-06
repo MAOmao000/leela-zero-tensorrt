@@ -614,6 +614,7 @@ void Network::ladder_update(
         if (result.policy[i] <= cut_policy) {
             result.policy[i] = -1.0f;
         } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
+#ifndef NDEBUG
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
@@ -621,6 +622,7 @@ void Network::ladder_update(
             myprintf("escape %s(%s) depth:%d\n", check_vertex.c_str(),
                 state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
                 ladder_map[i]);
+#endif
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
@@ -628,6 +630,7 @@ void Network::ladder_update(
             }
             result.policy[i] = -1.0f;
         } else if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_offense) {
+#ifndef NDEBUG
             const int x = static_cast<int>(i % BOARD_SIZE);
             const int y = static_cast<int>(i / BOARD_SIZE);
             const auto vertex = state->board.get_vertex(x, y);
@@ -635,6 +638,7 @@ void Network::ladder_update(
             myprintf("chase %s(%s) depth:%d\n", check_vertex.c_str(),
                 state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
                 ladder_map[i]);
+#endif
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
                     result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
