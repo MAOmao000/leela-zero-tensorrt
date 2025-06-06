@@ -72,7 +72,7 @@ enum class NetworkType {
 
 static constexpr auto PROGRAM_NAME = "Leela Zero(TensorRT ladder detection)";
 static constexpr auto PROGRAM_VERSION_MAJOR = "1";
-static constexpr auto PROGRAM_VERSION_MINOR = "1";
+static constexpr auto PROGRAM_VERSION_MINOR = "2";
 
 static constexpr auto MAX_CPUS = 256;
 
