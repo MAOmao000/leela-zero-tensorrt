@@ -95,13 +95,13 @@ public:
     }
     nvinfer1::ErrorCode getErrorCode(int32_t errorIdx) const noexcept override {
         std::lock_guard<std::mutex> lock(mutex);
-        if (errorIdx < 0 || errorIdx >= errors.size())
+        if (errorIdx < 0 || static_cast<size_t>(errorIdx) >= errors.size())
             return nvinfer1::ErrorCode::kINVALID_ARGUMENT;
         return errors[errorIdx].first;
     }
     IErrorRecorder::ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept override {
         std::lock_guard<std::mutex> lock(mutex);
-        if (errorIdx < 0 || errorIdx >= errors.size())
+        if (errorIdx < 0 || static_cast<size_t>(errorIdx) >= errors.size())
             return "";
         return errors[errorIdx].second.c_str();
     }
