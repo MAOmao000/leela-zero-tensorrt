@@ -344,7 +344,7 @@ void GTP::setup_default_parameters() {
     cfg_batch_size = 1;               // --batchsize
     cfg_batch_wait_time = 6;          // --batchwait
     cfg_search_monitor_interval = 5;  // --search_monitor_interval
-    cfg_analysis_thread = false;      // --analysis_thread
+    cfg_analysis_thread = true;       // --analysis_thread
     cfg_fixed_batch = false;          // --trt_batch
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
@@ -386,7 +386,7 @@ void GTP::setup_default_parameters() {
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
 
-    cfg_ladder_defense = 7;             // --ladder_defense
+    cfg_ladder_defense = 11;            // --ladder_defense
     cfg_ladder_offense = 8;             // --ladder_offense
     cfg_defense_stones = 4;             // --defense_stones
     cfg_offense_stones = 4;             // --offense_stones

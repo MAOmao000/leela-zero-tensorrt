@@ -209,7 +209,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Wait time (milli seconds) for full batch.")
         ("search_monitor_interval", po::value<int>()->default_value(cfg_search_monitor_interval),
                       "Search monitoring interval time (milli seconds).")
-        ("analysis_thread", po::value<std::string>()->default_value("nonthread"),
+        ("analysis_thread", po::value<std::string>()->default_value("thread"),
                       "Which to use: analysis thread? (thread/nonthread)")
         ("trt_batch", po::value<std::string>()->default_value("variable"),
                       "Which to use: fixed batch or variable batch? (fixed/variable)")
