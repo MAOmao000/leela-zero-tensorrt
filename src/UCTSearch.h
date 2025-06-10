@@ -140,7 +140,7 @@ private:
     int get_best_move(passflag_t passflag);
     void update_root();
     bool advance_to_new_rootstate();
-    void output_analysis(const FastState& state, const UCTNode& parent);
+    int output_analysis(const FastState& state, const UCTNode& parent);
 
     GameState& m_rootstate;
     std::unique_ptr<GameState> m_last_rootstate;

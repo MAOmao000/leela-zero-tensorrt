@@ -140,8 +140,9 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
                         });
                     }
                     if (m_run.load()) {
-                        output_analysis(m_rootstate, *m_root);
-                        m_numanalysis++;
+                        if (output_analysis(m_rootstate, *m_root)) {
+                            m_numanalysis++;
+                        }
                     } else {
                         break;
                     }
@@ -370,12 +371,12 @@ void UCTSearch::dump_stats(const FastState& state, UCTNode& parent) {
     tree_stats(parent);
 }
 
-void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
+int UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
     // We need to make a copy of the data before sorting
     auto sortable_data = std::vector<OutputAnalysisData>();
 
     if (!parent.has_children()) {
-        return;
+        return 0;
     }
 
     const auto color = state.get_to_move();
@@ -408,6 +409,9 @@ void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
         sortable_data.emplace_back(move, visits, move_eval, policy, pv, lcb,
                                    lcb_ratio_exceeded);
     }
+    if (sortable_data.size() <= 0) {
+        return 0;
+    }
     // Sort array to decide order
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));
 
@@ -421,6 +425,7 @@ void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
         i++;
     }
     gtp_printf_raw("\n");
+    return i;
 }
 
 void UCTSearch::tree_stats(const UCTNode& node) {
@@ -823,6 +828,9 @@ void UCTWorker::operator()() {
             lagtime = static_cast<int>(
                 std::chrono::duration_cast<std::chrono::microseconds>(
                 end_time - start_time).count() / 10000);
+            if (lagtime > m_time_for_move / 2) {
+                lagtime = m_time_for_move / 2;
+            }
         }
         m_network.drain_evals();
     } else {
