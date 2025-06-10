@@ -552,7 +552,6 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.outputs * 2);
             if (cfg_fixed_batch) {
                 // gamma, bias = tf.split(fc2, 2, axis=3)
-                // gamma, bias = tf.split(fc2, 2, axis=3)
                 gammaLayer = network->addSlice(
                     *fourthMatMulLayer->getOutput(0),
                     {4 ,{0, 0, 0, 0}},
