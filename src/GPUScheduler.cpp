@@ -364,7 +364,6 @@ void GPUScheduler<net_t>::batch_worker(
         if (!m_running) {
             return inputs;
         }
-        count = std::min(cfg_batch_size, count);
         // Move 'count' evals from shared queue to local list.
         auto end = begin(m_forward_queue);
         std::advance(end, count);
