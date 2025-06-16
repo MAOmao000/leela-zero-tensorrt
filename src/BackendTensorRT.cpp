@@ -623,7 +623,8 @@ void BackendTRT<net_t>::constructNetwork(
                 auto ip1_val_bias = begin(layer.weights)   + 3;
                 auto ip2_val_weight = begin(layer.weights) + 4;
                 auto ip2_val_bias = begin(layer.weights)   + 5;
-                //outValueLayer = buildConvLayer(
+                // value_conv = tf.layers.conv2d(shared_output, filters=1, kernel_size=1, padding='same', use_bias=False)
+                // value_conv = tf.layers.batch_normalization(value_conv, axis=1, momentum=.95, epsilon=1e-5, center=False, scale=False, fused=True, training=False)
                 auto valueConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
