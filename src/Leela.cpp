@@ -77,7 +77,7 @@ static void calculate_thread_count_cpu(
         }
         cfg_num_threads = num_threads;
     } else {
-        cfg_num_threads = cfg_max_threads;
+        cfg_num_threads = std::max(cfg_max_threads - 2, size_t{1});
     }
 }
 
@@ -106,7 +106,8 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size = (cfg_num_threads + (gpu_count * 1) - 1) / gpu_count;
+            cfg_batch_size = (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
+                / (gpu_count * cfg_gpu_batch);
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -116,20 +117,14 @@ static void calculate_thread_count_gpu(
     } else {
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
+            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
         } else {
             calculate_thread_count_cpu(vm);
-            if (cfg_max_threads < 4) {
-                cfg_batch_size = 1;
-            } else {
-                cfg_batch_size =
-                    cfg_num_threads * (cfg_num_threads / 2 - 1) / (cfg_num_threads / 2);
-            }
+            cfg_batch_size = cfg_num_threads / gpu_count / cfg_gpu_batch;
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
-        cfg_num_threads =
-            std::min(cfg_num_threads, cfg_batch_size * gpu_count);
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -205,14 +200,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 "ID of the TensorRT device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+        ("gpu_batch", po::value<std::string>()->default_value("single"),
+                      "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
                       "Wait time (milli seconds) for full batch.")
-        ("search_monitor_interval", po::value<int>()->default_value(cfg_search_monitor_interval),
-                      "Search monitoring interval time (milli seconds).")
-        ("analysis_thread", po::value<std::string>()->default_value("thread"),
-                      "Which to use: analysis thread? (thread/nonthread)")
-        ("trt_batch", po::value<std::string>()->default_value("variable"),
-                      "Which to use: fixed batch or variable batch? (fixed/variable)")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
         ("precision", po::value<std::string>(),
@@ -361,36 +352,22 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
 
+    auto gpu_batch = vm["gpu_batch"].as<std::string>();
+    if ("single" == gpu_batch) {
+        cfg_gpu_batch = 1;
+    } else if ("double" == gpu_batch) {
+        cfg_gpu_batch = 2;
+    } else {
+        printf("Unexpected option for --gpu_batch, single/double.\n");
+        exit(EXIT_FAILURE);
+    }
+
     if (vm.count("batchwait")) {
         cfg_batch_wait_time = vm["batchwait"].as<int>();
     }
 
-    if (vm.count("search_monitor_interval")) {
-        cfg_search_monitor_interval = vm["search_monitor_interval"].as<int>();
-    }
-
-    auto trt_batch = vm["trt_batch"].as<std::string>();
-    if ("fixed" == trt_batch) {
-        cfg_fixed_batch = true;
-    } else if ("variable" == trt_batch) {
-        cfg_fixed_batch = false;
-    } else {
-        printf("Unexpected option for --trt_batch, expecting fixed/variable.\n");
-        exit(EXIT_FAILURE);
-    }
-
     if (vm.count("builder_opt_level")) {
         cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
-    }
-
-    auto analysis_thread = vm["analysis_thread"].as<std::string>();
-    if ("thread" == analysis_thread) {
-        cfg_analysis_thread = true;
-    } else if ("nonthread" == analysis_thread) {
-        cfg_analysis_thread = false;
-    } else {
-        printf("Unexpected option for --analysis_thread, nonthread/thread.\n");
-        exit(EXIT_FAILURE);
     }
 
     auto trt_cache = vm["trt_cache"].as<std::string>();

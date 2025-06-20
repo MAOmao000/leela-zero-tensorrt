@@ -78,31 +78,31 @@ bool BackendTRT<net_t>::build(
     auto ext_i = filename.find_last_of(".");
     std::string weightsfile = filename.substr(0, ext_i);
     network->setName(weightsfile.c_str());
-    constructNetwork(network, tune_desc, batch_size);
-
-    if (!cfg_fixed_batch) {
-        for (auto i = 0; i < num_worker_threads; i++) {
-            auto profile = builder->createOptimizationProfile();
-            if (!profile) {
-                std::cerr << "TensorRT backend: failed to create optimization profile" << std::endl;
-                return false;
-            }
-            profile->setDimensions("InputFeature", OptProfileSelector::kMIN,
-                Dims4(1, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
-            profile->setDimensions("InputFeature", OptProfileSelector::kOPT,
-                Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
-            profile->setDimensions("InputFeature", OptProfileSelector::kMAX,
-                Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
-            if (this->m_net_type == NetworkType::MINIGO_SE) {
-                profile->setDimensions("BatchSize", OptProfileSelector::kMIN,
-                    Dims4(1, this->m_layers[1].channels, 1, 1));
-                profile->setDimensions("BatchSize", OptProfileSelector::kOPT,
-                    Dims4(batch_size, this->m_layers[1].channels, 1, 1));
-                profile->setDimensions("BatchSize", OptProfileSelector::kMAX,
-                    Dims4(batch_size, this->m_layers[1].channels, 1, 1));
-            }
-            config->addOptimizationProfile(profile);
+    if (!constructNetwork(network, tune_desc)) {
+        std::cerr << "TensorRT backend: failed to construct network" << std::endl;
+        return false;
+    }
+    for (auto i = 0; i < num_worker_threads; i++) {
+        auto profile = builder->createOptimizationProfile();
+        if (!profile) {
+            std::cerr << "TensorRT backend: failed to create optimization profile" << std::endl;
+            return false;
         }
+        profile->setDimensions("InputFeature", OptProfileSelector::kMIN,
+            Dims4(1, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+        profile->setDimensions("InputFeature", OptProfileSelector::kOPT,
+            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+        profile->setDimensions("InputFeature", OptProfileSelector::kMAX,
+            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+        if (this->m_net_type == NetworkType::MINIGO_SE) {
+            profile->setDimensions("BatchSize", OptProfileSelector::kMIN,
+                Dims4(1, this->m_layers[1].channels, 1, 1));
+            profile->setDimensions("BatchSize", OptProfileSelector::kOPT,
+                Dims4(batch_size, this->m_layers[1].channels, 1, 1));
+            profile->setDimensions("BatchSize", OptProfileSelector::kMAX,
+                Dims4(batch_size, this->m_layers[1].channels, 1, 1));
+        }
+        config->addOptimizationProfile(profile);
     }
 
     if (this->m_device_prop.major >= 8) {
@@ -138,8 +138,6 @@ bool BackendTRT<net_t>::build(
         std::string precision = typeid(net_t) == typeid(float) ? "single" : "half";
         std::string sep_char{std::filesystem::path::preferred_separator};
 
-        std::string batch_dim = cfg_fixed_batch ? "fix" : "var";
-
         uint8_t tuneHash[32];
         SHA2::get256(tune_desc.c_str(), tuneHash);
         // Truncated to 6 bytes
@@ -151,7 +149,7 @@ bool BackendTRT<net_t>::build(
 
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_batch%" PRId64 "_fp%d_%s_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -163,12 +161,12 @@ bool BackendTRT<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
+                num_worker_threads,
                 usingFP16 ? 16 : 32,
-                precision.c_str(),
-                batch_dim.c_str()
+                precision.c_str()
             );
             std::string paramStr = strprintf(
-                "_%d_%s_%s%s_%d_%d_%" PRId64 "_%d_%s_%s",
+                "_%d_%s_%s%s_%d_%d_%" PRId64 "x%d_%d_%s",
                 getInferLibVersion(),
                 deviceIdent,
                 PROGRAM_VERSION_MAJOR,
@@ -176,9 +174,9 @@ bool BackendTRT<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
+                num_worker_threads,
                 usingFP16 ? 16 : 32,
-                precision.c_str(),
-                batch_dim.c_str()
+                precision.c_str()
             );
             try {
                 plan = readFileBinary(planCacheFile);
@@ -208,6 +206,7 @@ bool BackendTRT<net_t>::build(
                 auto planBuffer = std::unique_ptr<IHostMemory>(
                     builder->buildSerializedNetwork(*network, *config));
                 if (!planBuffer) {
+                    tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
                     return false;
                 }
@@ -217,6 +216,7 @@ bool BackendTRT<net_t>::build(
                     static_cast<char*>(planBuffer->data()) + planBuffer->size()
                 );
                 if (this->m_model_hash.size() != 64) {
+                    tuneMutex.unlock();
                     std::cerr << "Unexpected model hash size" << std::endl;
                     return false;
                 }
@@ -236,14 +236,12 @@ bool BackendTRT<net_t>::build(
                 ofs.close();
                 std::cout << "Saved new plan cache to " + planCacheFile << std::endl;
                 plan.erase(plan.size() - 64 - paramStr.size());
-                tuneMutex.unlock();
             } else {
-                tuneMutex.unlock();
                 std::cout << "Using existing plan cache at " + planCacheFile << std::endl;
             }
         } else {
             auto timingCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_batch%" PRId64 "_fp%d_%s_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -252,9 +250,9 @@ bool BackendTRT<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
+                num_worker_threads,
                 usingFP16 ? 16 : 32,
-                precision.c_str(),
-                batch_dim.c_str()
+                precision.c_str()
             );
             std::string timingCacheBlob;
             try {
@@ -280,6 +278,7 @@ bool BackendTRT<net_t>::build(
             if (invalidTimingCache || !timingCacheBlob.size()) {
                 planBuffer.reset(builder->buildSerializedNetwork(*network, *config));
                 if (!planBuffer) {
+                    tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
                     return false;
                 }
@@ -290,11 +289,10 @@ bool BackendTRT<net_t>::build(
                 ofs.write(static_cast<char*>(serializedTimingCache->data()), serializedTimingCache->size());
                 ofs.close();
                 std::cout << "Saved new timing cache to " << timingCacheFile << std::endl;
-                tuneMutex.unlock();
             } else {
-                tuneMutex.unlock();
                 planBuffer.reset(builder->buildSerializedNetwork(*network, *config));
                 if (!planBuffer) {
+                    tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
                     return false;
                 }
@@ -304,6 +302,7 @@ bool BackendTRT<net_t>::build(
                 static_cast<char*>(planBuffer->data()),
                 static_cast<char*>(planBuffer->data()) + planBuffer->size());
         }
+        tuneMutex.unlock();
     }
     for (auto i = 0; i < num_worker_threads; i++) {
         std::unique_ptr<IRuntime> runtime
@@ -358,9 +357,7 @@ bool BackendTRT<net_t>::build(
             }
         }
         context->m_buffers_allocated = true;
-        if (!cfg_fixed_batch) {
-            context->mContext->setOptimizationProfileAsync(i, cudaStreamPerThread);
-        }
+        context->mContext->setOptimizationProfileAsync(i, cudaStreamPerThread);
         mRuntime.emplace_back(std::move(runtime));
         mEngine.emplace_back(std::move(engine));
         this->m_context.emplace_back(std::move(context));
@@ -370,34 +367,27 @@ bool BackendTRT<net_t>::build(
 }
 
 template <typename net_t>
-void BackendTRT<net_t>::constructNetwork(
+bool BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
-    std::string& tune_desc,
-    const int64_t batch_size) {
+    std::string& tune_desc) {
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
     ILayer* outPolicyLayer = nullptr;
     ILayer* outValueLayer = nullptr;
     ILayer* shapeLayer = nullptr;
-    ISliceLayer* biasLayer = nullptr;
-    ISliceLayer* gammaLayer = nullptr;
-    IShapeLayer* inShapeLayer = nullptr;
-    ICastLayer* castLayer = nullptr;
 
-    if (!cfg_fixed_batch &&
-        this->m_net_type == NetworkType::MINIGO_SE) {
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
         auto batchSizeTensor = initInputs(
             "BatchSize",
             network,
             this->m_layers[1].channels,
             1,
-            1,
-            batch_size);
+            1);
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
-        inShapeLayer = network->addShape(*batchSizeTensor);
-        castLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
+        auto inShapeLayer = network->addShape(*batchSizeTensor);
+        auto castLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
 
         shapeLayer = network->addUnary(
             *castLayer->getOutput(0),
@@ -414,8 +404,7 @@ void BackendTRT<net_t>::constructNetwork(
                 network,
                 layer.channels,
                 BOARD_SIZE,
-                BOARD_SIZE,
-                batch_size);
+                BOARD_SIZE);
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             auto initialConvLayer = buildConvLayer(
@@ -437,6 +426,10 @@ void BackendTRT<net_t>::constructNetwork(
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && !layer.is_se_block) {
+            if (!outputConv) {
+                std::cerr << "outputConv is nullptr on residual block." << std::endl;
+                return false;
+            }
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -479,6 +472,10 @@ void BackendTRT<net_t>::constructNetwork(
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && layer.is_se_block) {
+            if (!shapeLayer || !outputConv) {
+                std::cerr << "shapeLayer or outputConv is nullptr on residual se block." << std::endl;
+                return false;
+            }
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -550,38 +547,22 @@ void BackendTRT<net_t>::constructNetwork(
                 tune_desc,
                 layer.name + ".conv.fourth",
                 layer.outputs * 2);
-            if (cfg_fixed_batch) {
-                // gamma, bias = tf.split(fc2, 2, axis=3)
-                gammaLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, 0, 0, 0}},
-                    {4 ,{batch_size, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-                // gamma, bias = tf.split(fc2, 2, axis=3)
-                biasLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, layer.channels, 0, 0}},
-                    {4 ,{batch_size, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-            } else {
-                gammaLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, 0, 0, 0}},
-                    {4 ,{0, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-                gammaLayer->setInput(2, *shapeLayer->getOutput(0));
-                // gamma, bias = tf.split(fc2, 2, axis=3)
-                biasLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, layer.channels, 0, 0}},
-                    {4 ,{0, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-                biasLayer->setInput(2, *shapeLayer->getOutput(0));
-            }
+            // gamma = tf.split(fc2, 2, axis=3)
+            auto gammaLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, 0, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            gammaLayer->setInput(2, *shapeLayer->getOutput(0));
+            // bias = tf.split(fc2, 2, axis=3)
+            auto biasLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, layer.channels, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            biasLayer->setInput(2, *shapeLayer->getOutput(0));
             // sig = tf.nn.sigmoid(gamma)
             auto sigLayer = buildActivationLayer(
                 gammaLayer->getOutput(0),
@@ -649,11 +630,8 @@ void BackendTRT<net_t>::constructNetwork(
                     * actValueLayer->getOutput(0)->getDimensions().d[2]
                     * actValueLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actValueLayer->getOutput(0));
-                int32_t variable_batch = static_cast<int32_t>(batch_size);
-                if (!cfg_fixed_batch) {
-                    variable_batch = static_cast<int32_t>(
-                        actValueLayer->getOutput(0)->getDimensions().d[0]);
-                }
+                int32_t const variable_batch = static_cast<int32_t>(
+                    actValueLayer->getOutput(0)->getDimensions().d[0]);
                 inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
                 auto filter1Const =
                     network->addConstant(
@@ -740,12 +718,9 @@ void BackendTRT<net_t>::constructNetwork(
                     actPolicyLayer->getOutput(0)->getDimensions().d[1]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[2]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[3]);
-                int32_t variable_batch = static_cast<int32_t>(batch_size);
-                if (!cfg_fixed_batch) {
-                    variable_batch = static_cast<int32_t>(
-                        actPolicyLayer->getOutput(0)->getDimensions().d[0]);
-                }
                 auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
+                int32_t const variable_batch = static_cast<int32_t>(
+                    actPolicyLayer->getOutput(0)->getDimensions().d[0]);
                 inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
                 // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
                 auto filterConst =
@@ -775,6 +750,10 @@ void BackendTRT<net_t>::constructNetwork(
             }
         }
     }
+    if (!outPolicyLayer || !outValueLayer) {
+        std::cerr << "outPolicyLayer or outValueLayer is nullptr on constructNetwork." << std::endl;
+        return false;
+    }
     // Mark the outputs for the network
     auto outputPolicy = outPolicyLayer->getOutput(0);
     network->markOutput(*outputPolicy);
@@ -788,6 +767,7 @@ void BackendTRT<net_t>::constructNetwork(
     outputValue->setType(DataType::kFLOAT);
     outputValue->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
     std::cout << "Done constructing network..." << std::endl;
+    return true;
 }
 
 template <typename net_t>
@@ -796,26 +776,21 @@ ITensor* BackendTRT<net_t>::initInputs(
     TrtUniquePtr<INetworkDefinition>& network,
     const int channels,
     const int rows,
-    const int cols,
-    const int64_t batch_size) {
+    const int cols) {
 
     ITensor* inputFeature;
 
-    auto variable_batch = batch_size;
-    if (!cfg_fixed_batch) {
-        variable_batch = -1;
-    }
     std::string_view name_str{inputName};
     if (typeid(net_t) == typeid(float)) {
         inputFeature = network->addInput(
             inputName,
             DataType::kFLOAT,
-            {4, {variable_batch, channels, rows, cols}});
+            {4, {-1, channels, rows, cols}});
     } else {
         inputFeature = network->addInput(
             inputName,
             DataType::kHALF,
-            {4, {variable_batch, channels, rows, cols}});
+            {4, {-1, channels, rows, cols}});
     }
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
@@ -1145,25 +1120,23 @@ void BackendTRT<net_t>::forward_activations(
             cudaStreamPerThread)
         );
     }
-    if (!cfg_fixed_batch) {
+    cudnn_context.mContext->setInputShape(
+        "InputFeature",
+        Dims4(
+            batch_size,
+            this->m_layers[0].channels,
+            BOARD_SIZE,
+            BOARD_SIZE)
+    );
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
         cudnn_context.mContext->setInputShape(
-            "InputFeature",
+            "BatchSize",
             Dims4(
                 batch_size,
-                this->m_layers[0].channels,
-                BOARD_SIZE,
-                BOARD_SIZE)
+                this->m_layers[1].channels,
+                1,
+                1)
         );
-        if (this->m_net_type == NetworkType::MINIGO_SE) {
-            cudnn_context.mContext->setInputShape(
-                "BatchSize",
-                Dims4(
-                    batch_size,
-                    this->m_layers[1].channels,
-                    1,
-                    1)
-            );
-        }
     }
     ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
     search = cudnn_context.mBuffers.find("OutputPolicy");

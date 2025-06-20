@@ -213,10 +213,9 @@ private:
     );
 
     // Create full model using the TensorRT network definition API and build the engine.
-    void constructNetwork(
+    bool constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string& tune_desc,
-        const int64_t batch_size
+        std::string& tune_desc
     );
 
     nvinfer1::ITensor* initInputs(
@@ -224,8 +223,7 @@ private:
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         const int channels,
         const int rows,
-        const int cols,
-        const int64_t batch_size
+        const int cols
     );
 
     nvinfer1::ILayer* buildConvLayer(

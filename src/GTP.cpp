@@ -62,10 +62,8 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
+size_t cfg_gpu_batch;
 int cfg_batch_wait_time;
-int cfg_search_monitor_interval;
-bool cfg_analysis_thread;
-bool cfg_fixed_batch;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -339,13 +337,11 @@ void GTP::setup_default_parameters() {
     cfg_allow_pondering = true; // --noponder
 
     // we will re-calculate this on Leela.cpp
-    cfg_num_threads = 1;              // -t, --threads
+    cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
-    cfg_batch_size = 1;               // --batchsize
-    cfg_batch_wait_time = 6;          // --batchwait
-    cfg_search_monitor_interval = 5;  // --search_monitor_interval
-    cfg_analysis_thread = true;       // --analysis_thread
-    cfg_fixed_batch = false;          // --trt_batch
+    cfg_batch_size = 1;         // --batchsize
+    cfg_gpu_batch = 1;          // --gpu_batch
+    cfg_batch_wait_time = 11;   // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -395,7 +391,7 @@ void GTP::setup_default_parameters() {
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root
-    cfg_cut_policy = 0.01f;             // --cut_policy
+    cfg_cut_policy = 0.005f;            // --cut_policy
     cfg_play_style = style_t::STABLE;   // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};

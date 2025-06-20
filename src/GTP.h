@@ -125,16 +125,8 @@ extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
 extern size_t cfg_num_threads;
 extern size_t cfg_batch_size;
+extern size_t cfg_gpu_batch;
 extern int cfg_batch_wait_time;
-extern int cfg_search_monitor_interval;
-enum class monitor_t {
-    NONTHREAD, THREAD
-};
-extern bool cfg_analysis_thread;
-enum class trtbatch_t {
-    FIXED, VARIABLE
-};
-extern bool cfg_fixed_batch;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;
