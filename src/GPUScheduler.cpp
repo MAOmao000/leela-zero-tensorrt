@@ -404,11 +404,9 @@ void GPUScheduler<net_t>::batch_worker(
         }
         auto count = inputs.size();
         // prepare input for forward() call
-        if (!cfg_fixed_batch) {
-            batch_input.resize(in_size * count);
-            batch_output_pol.resize(m_out_pol_size * count);
-            batch_output_val.resize(m_out_val_size * count);
-        }
+        batch_input.resize(in_size * count);
+        batch_output_pol.resize(m_out_pol_size * count);
+        batch_output_val.resize(m_out_val_size * count);
         auto index = size_t{0};
         for (auto& x : inputs) {
             std::unique_lock<std::mutex> lk(x->mutex);
@@ -418,17 +416,6 @@ void GPUScheduler<net_t>::batch_worker(
                 begin(batch_input) + in_size * index
             );
             index++;
-        }
-        if (cfg_fixed_batch) {
-            const auto dummy_input = std::vector<float>(in_size);
-            for (auto i = index; i < cfg_batch_size; i++) {
-                std::copy(
-                    begin(dummy_input),
-                    end(dummy_input),
-                    begin(batch_input) + in_size * i
-                );
-            }
-            count = cfg_batch_size;
         }
         if (!m_draining.load()) {
             // run the NN evaluation
