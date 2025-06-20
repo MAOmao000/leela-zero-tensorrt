@@ -117,57 +117,53 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
 
     m_root = std::make_unique<UCTNode>(FastBoard::PASS, 0.0f);
 
-    if (cfg_analysis_thread) {
-        auto analysis = [this]() {
+    auto analysis = [this]() {
+        while (true) {
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_cv.wait(lock, [this]() {
+                    return m_run.load() || m_kill.load();
+                });
+            }
+            if (m_kill.load()) {
+                return;
+            }
+            m_numanalysis.store(0);
             while (true) {
                 {
                     std::unique_lock<std::mutex> lock(m_mutex);
-                    m_cv.wait(lock, [this]() {
-                        return m_run.load() || m_kill.load();
+                    m_cv.wait_for(
+                        lock, std::chrono::milliseconds(
+                            cfg_analyze_tags.interval_centis() * 10), [this]() {
+                                return !m_run.load();
                     });
                 }
-                if (m_kill.load()) {
-                    return;
-                }
-                m_numanalysis.store(0);
-                while (true) {
-                    {
-                        std::unique_lock<std::mutex> lock(m_mutex);
-                        m_cv.wait_for(
-                            lock, std::chrono::milliseconds(
-                                cfg_analyze_tags.interval_centis() * 10), [this]() {
-                                    return !m_run.load();
-                        });
+                if (m_run.load()) {
+                    if (output_analysis(m_rootstate, *m_root)) {
+                        m_numanalysis++;
                     }
-                    if (m_run.load()) {
-                        if (output_analysis(m_rootstate, *m_root)) {
-                            m_numanalysis++;
-                        }
-                    } else {
-                        break;
-                    }
+                } else {
+                    break;
                 }
-                {
-                    std::lock_guard<std::mutex> lock(m_mutex_stop);
-                    m_analysis_stop = true;
-                }
-                m_cv_analysis_stop.notify_one();
             }
-        };
-        m_analysis = std::thread(analysis);
-    }
+            {
+                std::lock_guard<std::mutex> lock(m_mutex_stop);
+                m_analysis_stop = true;
+            }
+            m_cv_analysis_stop.notify_one();
+        }
+    };
+    m_analysis = std::thread(analysis);
 }
 
 UCTSearch::~UCTSearch() {
-    if (cfg_analysis_thread) {
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            m_run.store(true);
-            m_kill.store(true);
-        }
-        m_cv.notify_one();
-        m_analysis.join();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_run.store(true);
+        m_kill.store(true);
     }
+    m_cv.notify_one();
+    m_analysis.join();
 }
 
 bool UCTSearch::advance_to_new_rootstate() {
@@ -771,7 +767,7 @@ bool UCTSearch::have_alternate_moves(const int elapsed_centis,
     // which will cause Leela to quickly respond to obvious/forced moves.
     // That comes at the cost of some playing strength as she now cannot
     // think ahead about her next moves in the remaining time.
-    auto tc = m_rootstate.get_timecontrol();
+    const auto& tc = m_rootstate.get_timecontrol();
     if (!tc.can_accumulate_time(my_color)
         || m_maxplayouts < UCTSearch::UNLIMITED_PLAYOUTS) {
         if (cfg_timemanage != TimeManagement::FAST) {
@@ -797,51 +793,41 @@ bool UCTSearch::stop_thinking(const int elapsed_centis,
 }
 
 void UCTWorker::operator()() {
-    if (cfg_analysis_thread) {
-        std::chrono::system_clock::time_point start_time, end_time;
-        int lagtime = 0;
-        while(true) {
-            start_time = std::chrono::system_clock::now();
-            auto currstate = std::make_unique<GameState>(m_rootstate);
-            auto result = m_search->play_simulation(*currstate, m_root);
-            if (result.valid()) {
-                m_search->increment_playouts();
-            }
-            if (!m_search->is_running()) {
+    std::chrono::system_clock::time_point start_time, end_time;
+    int lagtime = 0;
+    while(true) {
+        start_time = std::chrono::system_clock::now();
+        auto currstate = std::make_unique<GameState>(m_rootstate);
+        auto result = m_search->play_simulation(*currstate, m_root);
+        if (result.valid()) {
+            m_search->increment_playouts();
+        }
+        if (!m_search->is_running()) {
+            break;
+        }
+        if (m_start) {
+            Time elapsed;
+            int elapsed_centis = Time::timediff_centis(*m_start, elapsed);
+            if (m_search->stop_thinking(elapsed_centis, m_time_for_move - lagtime) ||
+                !m_search->have_alternate_moves(elapsed_centis, m_time_for_move - lagtime)) {
+                m_search->set_running(false);
                 break;
             }
-            if (m_start) {
-                Time elapsed;
-                int elapsed_centis = Time::timediff_centis(*m_start, elapsed);
-                if (m_search->stop_thinking(elapsed_centis, m_time_for_move - lagtime) ||
-                    !m_search->have_alternate_moves(elapsed_centis, m_time_for_move - lagtime)) {
-                    m_search->set_running(false);
-                    break;
-                }
-            } else {
-                if (Utils::input_pending() || m_search->stop_thinking(0, 1)) {
-                    m_search->set_running(false);
-                    break;
-                }
-            }
-            end_time = std::chrono::system_clock::now();
-            lagtime = static_cast<int>(
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                end_time - start_time).count() / 10000);
-            if (lagtime > m_time_for_move / 2) {
-                lagtime = m_time_for_move / 2;
+        } else {
+            if (Utils::input_pending() || m_search->stop_thinking(0, 1)) {
+                m_search->set_running(false);
+                break;
             }
         }
-        m_network.drain_evals();
-    } else {
-        do {
-            auto currstate = std::make_unique<GameState>(m_rootstate);
-            auto result = m_search->play_simulation(*currstate, m_root);
-            if (result.valid()) {
-                m_search->increment_playouts();
-            }
-        } while (m_search->is_running());
+        end_time = std::chrono::system_clock::now();
+        lagtime = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+            end_time - start_time).count() / 10000);
+        if (lagtime > m_time_for_move / 2) {
+            lagtime = m_time_for_move / 2;
+        }
     }
+    m_network.drain_evals();
 }
 
 void UCTSearch::increment_playouts() {
@@ -879,64 +865,22 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
             &start, time_for_move));
     }
 
-    if (cfg_analysis_thread) {
-        if (cfg_analyze_tags.interval_centis()) {
-            m_analysis_stop = false;
-            m_cv.notify_one();
-            tg.wait_all();
-            m_cv.notify_one();
-            {
-                std::unique_lock<std::mutex> lock(m_mutex_stop);
-                m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
-            }
-            if (!m_numanalysis.load()) {
-                output_analysis(m_rootstate, *m_root);
-            }
-        } else {
-            tg.wait_all();
+    if (cfg_analyze_tags.interval_centis()) {
+        m_analysis_stop = false;
+        m_cv.notify_one();
+        tg.wait_all();
+        m_cv.notify_one();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
         }
-        m_network.resume_evals();
-    } else {
-        auto keeprunning = true;
-        auto last_update = 0;
-        auto last_output = 0;
-        do {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(cfg_search_monitor_interval));
-
-            Time elapsed;
-            int elapsed_centis = Time::timediff_centis(start, elapsed);
-
-            if (cfg_analyze_tags.interval_centis()
-                && elapsed_centis - last_output
-                       > cfg_analyze_tags.interval_centis()) {
-                last_output = elapsed_centis;
-                output_analysis(m_rootstate, *m_root);
-            }
-
-            // output some stats every few seconds
-            // check if we should still search
-            if (!cfg_quiet && elapsed_centis - last_update > 250) {
-                last_update = elapsed_centis;
-                myprintf("%s\n", get_analysis(m_playouts.load()).c_str());
-            }
-            keeprunning = is_running();
-            keeprunning &= !stop_thinking(elapsed_centis, time_for_move);
-            keeprunning &= have_alternate_moves(elapsed_centis, time_for_move);
-        } while (keeprunning);
-
-        // Make sure to post at least once.
-        if (cfg_analyze_tags.interval_centis() && last_output == 0) {
+        if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
         }
-
-        // Stop the search.
-        m_run.store(false);
-        m_network.drain_evals();
+    } else {
         tg.wait_all();
-        m_network.resume_evals();
     }
-
+    m_network.resume_evals();
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
         node->set_active(true);
@@ -998,55 +942,22 @@ void UCTSearch::ponder() {
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network));
     }
-
-    if (cfg_analysis_thread) {
-        if (cfg_analyze_tags.interval_centis()) {
-            m_analysis_stop = false;
-            m_cv.notify_one();
-            tg.wait_all();
-            m_cv.notify_one();
-            {
-                std::unique_lock<std::mutex> lock(m_mutex_stop);
-                m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
-            }
-            if (!m_numanalysis.load()) {
-                output_analysis(m_rootstate, *m_root);
-            }
-        } else {
-            tg.wait_all();
+    if (cfg_analyze_tags.interval_centis()) {
+        m_analysis_stop = false;
+        m_cv.notify_one();
+        tg.wait_all();
+        m_cv.notify_one();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
         }
-        m_network.resume_evals();
-    } else {
-        Time start;
-        auto keeprunning = true;
-        auto last_output = 0;
-        do {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(cfg_search_monitor_interval));
-            if (cfg_analyze_tags.interval_centis()) {
-                Time elapsed;
-                int elapsed_centis = Time::timediff_centis(start, elapsed);
-                if (elapsed_centis - last_output
-                    > cfg_analyze_tags.interval_centis()) {
-                    last_output = elapsed_centis;
-                    output_analysis(m_rootstate, *m_root);
-                }
-            }
-            keeprunning = is_running();
-            keeprunning &= !stop_thinking(0, 1);
-        } while (!Utils::input_pending() && keeprunning);
-
-        // Make sure to post at least once.
-        if (cfg_analyze_tags.interval_centis() && last_output == 0) {
+        if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
         }
-        // Stop the search.
-        m_run.store(false);
-        m_network.drain_evals();
+    } else {
         tg.wait_all();
-        m_network.resume_evals();
     }
-
+    m_network.resume_evals();
     // Display search info.
     myprintf("\n");
     dump_stats(m_rootstate, *m_root);
