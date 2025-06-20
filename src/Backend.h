@@ -207,7 +207,7 @@ protected:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     int m_num_worker_threads{1};
-    cudaDeviceProp m_device_prop;
+    cudaDeviceProp m_device_prop{};
     std::string m_model_hash{""};
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
