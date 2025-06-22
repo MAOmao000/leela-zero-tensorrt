@@ -81,7 +81,7 @@ void Network::benchmark(const GameState* state, const int iterations) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false);
             }
         });
     }
@@ -394,7 +394,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
     // or just read directly as needed.
     auto gzhandle = gzopen(filename.c_str(), "rb");
     if (gzhandle == nullptr) {
-        myprintf("Could not open weights file: %s\n", filename.c_str());
+        myprintf_error("Could not open weights file: %s\n", filename.c_str());
         return {0, 0};
     }
     // Stream the gz file in to a memory buffer stream.
@@ -405,7 +405,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         auto bytesRead = gzread(gzhandle, chunkBuffer.data(), chunkBufferSize);
         if (bytesRead == 0) break;
         if (bytesRead < 0) {
-            myprintf("Failed to decompress or read: %s\n", filename.c_str());
+            myprintf_error("Failed to decompress or read: %s\n", filename.c_str());
             gzclose(gzhandle);
             return {0, 0};
         }
@@ -422,7 +422,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         // First line is the file format version id
         iss >> format_version;
         if (iss.fail() || (format_version != 1 && format_version != 2)) {
-            myprintf("Weights file is the wrong version.\n");
+            myprintf_error("Weights file is the wrong version.\n");
             return {0, 0};
         } else {
             // Version 2 networks are identical to v1, except
@@ -654,7 +654,7 @@ void Network::ladder_update(
 
 bool Network::get_output(
     const GameState* state, const Ensemble ensemble,
-    Network::Netresult& result,
+    Network::Netresult& result, const bool is_root,
     const int symmetry,
     const bool read_cache, const bool write_cache) {
 
@@ -672,12 +672,12 @@ bool Network::get_output(
     bool ret;
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-        ret = get_output_internal(state, symmetry, result);
+        ret = get_output_internal(state, symmetry, result, is_root);
     } else if (ensemble == AVERAGE) {
         assert(symmetry == -1);
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
             Netresult tmpresult;
-            ret = get_output_internal(state, sym, tmpresult);
+            ret = get_output_internal(state, sym, tmpresult, is_root);
             if (!ret) {
                 break;
             }
@@ -695,7 +695,7 @@ bool Network::get_output(
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         const auto rand_sym = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        ret = get_output_internal(state, rand_sym, result);
+        ret = get_output_internal(state, rand_sym, result, is_root);
     }
 
     if (!ret) {
@@ -722,7 +722,8 @@ bool Network::get_output(
 
 bool Network::get_output_internal(const GameState* state,
                                   const int symmetry,
-                                  Network::Netresult& result) {
+                                  Network::Netresult& result,
+                                  const bool is_root) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
     const auto input_data = gather_features(state, symmetry);
@@ -732,7 +733,7 @@ bool Network::get_output_internal(const GameState* state,
     value_data_size = 1;
     std::vector<float> policy_data(policy_data_size);
     std::vector<float> value_data(value_data_size);
-    if (m_forward->forward(input_data, policy_data, value_data)) {
+    if (m_forward->forward(input_data, policy_data, value_data, is_root)) {
         // Get the moves
         for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
             const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];

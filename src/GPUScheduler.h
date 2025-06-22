@@ -79,7 +79,8 @@ public:
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
-        std::vector<float>& output_val
+        std::vector<float>& output_val,
+        const bool is_root
     ) override;
     void batch_worker(
         const size_t gnum,

@@ -307,19 +307,24 @@ template <typename net_t>
 bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
-    std::vector<float>& output_val)
+    std::vector<float>& output_val,
+    const bool is_root)
 {
     if (m_draining.load()) {
         return false;
     }
     auto entry =
         std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
+    size_t queue_size = 0;
     std::unique_lock<std::mutex> lk(entry->mutex);
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
+        queue_size = m_forward_queue.size();
     }
-    m_cv.notify_one();
+    if (is_root || queue_size >= cfg_batch_size) {
+        m_cv.notify_one();
+    }
     entry->cv.wait(lk);
 
     if (output_pol[0] == -1.0f) {
@@ -382,6 +387,12 @@ void GPUScheduler<net_t>::batch_worker(
             return inputs;
         }
         auto count = std::min(cfg_batch_size, m_forward_queue.size());
+        //if (count < cfg_batch_size) {
+        //    lk.unlock();
+        //    std::this_thread::yield();
+        //    lk.lock();
+        //    count = std::min(cfg_batch_size, m_forward_queue.size());
+        //}
         // Move 'count' evals from shared queue to local list.
         auto end = begin(m_forward_queue);
         std::advance(end, count);
