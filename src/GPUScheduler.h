@@ -80,7 +80,7 @@ public:
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
-        const bool is_root
+        const bool full_batch
     ) override;
     void batch_worker(
         const size_t gnum,

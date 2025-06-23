@@ -308,7 +308,7 @@ bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
-    const bool is_root)
+    const bool full_batch)
 {
     if (m_draining.load()) {
         return false;
@@ -322,7 +322,7 @@ bool GPUScheduler<net_t>::forward(
         m_forward_queue.emplace_back(entry);
         queue_size = m_forward_queue.size();
     }
-    if (is_root || queue_size >= cfg_batch_size) {
+    if (!full_batch || queue_size >= cfg_batch_size) {
         m_cv.notify_one();
     }
     entry->cv.wait(lk);
@@ -381,12 +381,18 @@ void GPUScheduler<net_t>::batch_worker(
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
         std::unique_lock<std::mutex> lk(m_mutex);
         m_cv.wait(lk, [this] {
-            return !m_forward_queue.empty() || !m_running;
+            return !m_running ||
+                m_draining.load() ||
+                m_forward_queue.size() >= cfg_batch_size ||
+                m_forward_queue.size() == 1;
         });
         if (!m_running) {
             return inputs;
         }
         auto count = std::min(cfg_batch_size, m_forward_queue.size());
+        if (!count) {
+            return inputs;
+        }
         //if (count < cfg_batch_size) {
         //    lk.unlock();
         //    std::this_thread::yield();
@@ -414,6 +420,9 @@ void GPUScheduler<net_t>::batch_worker(
             return;
         }
         auto count = inputs.size();
+        if (!count) {
+            continue;
+        }
         // prepare input for forward() call
         batch_input.resize(in_size * count);
         batch_output_pol.resize(m_out_pol_size * count);

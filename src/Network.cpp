@@ -81,7 +81,7 @@ void Network::benchmark(const GameState* state, const int iterations) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
             }
         });
     }
@@ -654,7 +654,7 @@ void Network::ladder_update(
 
 bool Network::get_output(
     const GameState* state, const Ensemble ensemble,
-    Network::Netresult& result, const bool is_root,
+    Network::Netresult& result, const bool full_batch,
     const int symmetry,
     const bool read_cache, const bool write_cache) {
 
@@ -672,12 +672,12 @@ bool Network::get_output(
     bool ret;
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-        ret = get_output_internal(state, symmetry, result, is_root);
+        ret = get_output_internal(state, symmetry, result, full_batch);
     } else if (ensemble == AVERAGE) {
         assert(symmetry == -1);
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
             Netresult tmpresult;
-            ret = get_output_internal(state, sym, tmpresult, is_root);
+            ret = get_output_internal(state, sym, tmpresult, full_batch);
             if (!ret) {
                 break;
             }
@@ -695,7 +695,7 @@ bool Network::get_output(
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         const auto rand_sym = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        ret = get_output_internal(state, rand_sym, result, is_root);
+        ret = get_output_internal(state, rand_sym, result, full_batch);
     }
 
     if (!ret) {
@@ -723,7 +723,7 @@ bool Network::get_output(
 bool Network::get_output_internal(const GameState* state,
                                   const int symmetry,
                                   Network::Netresult& result,
-                                  const bool is_root) {
+                                  const bool full_batch) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
     const auto input_data = gather_features(state, symmetry);
@@ -733,7 +733,7 @@ bool Network::get_output_internal(const GameState* state,
     value_data_size = 1;
     std::vector<float> policy_data(policy_data_size);
     std::vector<float> value_data(value_data_size);
-    if (m_forward->forward(input_data, policy_data, value_data, is_root)) {
+    if (m_forward->forward(input_data, policy_data, value_data, full_batch)) {
         // Get the moves
         for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
             const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];

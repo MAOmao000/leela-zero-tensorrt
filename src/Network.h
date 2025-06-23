@@ -63,7 +63,7 @@ public:
     ~Network() = default;
 
     bool get_output(const GameState* state, const Ensemble ensemble,
-                    Network::Netresult& result, const bool is_root,
+                    Network::Netresult& result, const bool full_batch,
                     const int symmetry = -1, const bool read_cache = true,
                     const bool write_cache = true);
 
@@ -106,7 +106,7 @@ private:
     bool get_output_internal(const GameState* state,
                              int symmetry,
                              Network::Netresult& result,
-                             const bool is_root);
+                             const bool full_batch);
     void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,

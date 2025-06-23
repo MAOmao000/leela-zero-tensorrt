@@ -341,7 +341,7 @@ void GTP::setup_default_parameters() {
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
     cfg_gpu_batch = 1;          // --gpu_batch
-    cfg_batch_wait_time = 10;   // --batchwait
+    cfg_batch_wait_time = 0;    // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -889,21 +889,21 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, true,
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
                                         Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, true, s,
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false, s,
                                             false);
                 if (ret) {
                     Network::show_heatmap(&game, vec, false);
                 }
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, true, -1,
+            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, false, -1,
                                         false);
         } else {
-            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, true,
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
                                         std::stoi(symmetry), false);
         }
 

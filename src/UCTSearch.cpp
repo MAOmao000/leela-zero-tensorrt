@@ -290,7 +290,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
                 float eval;
                 const auto had_children = currnode->has_children();
                 const auto success = currnode->create_children(
-                    m_network, m_nodes, currstate, eval, false, get_min_psa_ratio());
+                    m_network, m_nodes, currstate, eval, true, get_min_psa_ratio());
                 if (!had_children && success) {
                     result = SearchResult::from_eval(eval);
                     new_node = true;
@@ -299,15 +299,17 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
         }
         if (currnode->has_children() && !result.valid()) {
             auto next = currnode->uct_select_child(color, currnode == m_root.get());
-            auto move = next->get_move();
-            currstate.play_move(move);
-            if (move != FastBoard::PASS && currstate.superko()) {
-                next->invalidate();
-            } else {
-                node_stack.push(currnode);
-                new_stack.push(new_node);
-                currnode = next;
-                continue;
+            if (next) {
+                auto move = next->get_move();
+                currstate.play_move(move);
+                if (move != FastBoard::PASS && currstate.superko()) {
+                    next->invalidate();
+                } else {
+                    node_stack.push(currnode);
+                    new_stack.push(new_node);
+                    currnode = next;
+                    continue;
+                }
             }
         }
         node_stack.push(currnode);
