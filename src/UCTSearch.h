@@ -53,9 +53,6 @@ public:
     float eval() const {
         return m_eval;
     }
-    void set_valid(const bool valid = false) {
-        m_valid = valid;
-    }
     static SearchResult from_eval(const float eval) {
         return SearchResult(eval);
     }
@@ -126,12 +123,15 @@ public:
     SearchResult play_simulation(GameState& currstate, UCTNode* node);
     bool have_alternate_moves(int elapsed_centis, int time_for_move);
     bool stop_thinking(int elapsed_centis = 0, int time_for_move = 0) const;
+    void set_analysis_out(bool analysis_out) {
+        m_analysis_out = analysis_out;
+    }
 
 private:
     float get_min_psa_ratio() const;
     void dump_stats(const FastState& state, UCTNode& parent);
     void tree_stats(const UCTNode& node);
-    std::string get_pv(FastState& state, UCTNode& parent);
+    std::string get_pv(FastState& state, const UCTNode& parent);
     std::string get_analysis(int playouts);
     bool should_resign(passflag_t passflag, float besteval);
     int est_playouts_left(int elapsed_centis, int time_for_move) const;
@@ -162,6 +162,7 @@ private:
     std::mutex m_mutex_stop;
     std::condition_variable m_cv;
     std::condition_variable m_cv_analysis_stop;
+    bool m_analysis_out{true};
     bool m_analysis_stop{false};
     std::thread m_analysis;
 };
