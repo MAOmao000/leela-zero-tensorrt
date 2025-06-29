@@ -44,7 +44,6 @@
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
-#include "LadderDetection.h"
 
 /*
  * These functions belong to UCTNode but should only be called on the root node
@@ -167,62 +166,14 @@ void UCTNode::randomize_first_proportionally() {
     std::iter_swap(begin(m_children), begin(m_children) + index);
 }
 
-UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
-    if ((!cfg_ladder_defense_root && !cfg_ladder_offense_root)
-        || base_state.m_komove != FastBoard::NO_VERTEX) {
-        for (const auto& child : m_children) {
-            /* If we prevent the engine from passing, we must bail out when
-               we only have unreasonable moves to pick, like filling eyes.
-               Note that this knowledge isn't required by the engine,
-               we require it because we're overruling its moves. */
-            if (child->m_move != FastBoard::PASS
-                && !base_state.board.is_eye(base_state.get_to_move(), child->m_move)) {
-                return child.get();
-            }
-        }
-        return nullptr;
-    }
-    auto state = std::make_unique<GameState>(base_state);
-    const auto turn_color = state->board.get_to_move();
+UCTNode* UCTNode::get_nopass_child(FastState& state) const {
     for (const auto& child : m_children) {
+        /* If we prevent the engine from passing, we must bail out when
+           we only have unreasonable moves to pick, like filling eyes.
+           Note that this knowledge isn't required by the engine,
+           we require it because we're overruling its moves. */
         if (child->m_move != FastBoard::PASS
-            && !state->board.is_eye(state->board.get_to_move(), child->m_move)) {
-
-            auto capture_count = state->board.get_prisoners(turn_color);
-            state->play_move(turn_color, child->m_move);
-            capture_count = state->board.get_prisoners(turn_color) - capture_count;
-            auto stone_count = state->board.get_string_count(child->m_move);
-            if (cfg_ladder_defense_root > 0 &&
-                state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count) {
-
-                if (stone_count >= cfg_defense_stones) {
-                    auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (depth < 0 &&
-                        -depth / 2 + stone_count > capture_count &&
-                        -depth >= cfg_ladder_defense_root) {
-#ifndef NDEBUG
-                        auto check_vertex = state->move_to_text(child->m_move);
-                        Utils::myprintf("can't escape. %s depth count:%d\n",
-                            check_vertex.c_str(), -depth);
-#endif
-                        state->undo_move();
-                        continue;
-                    }
-                }
-            }
-            if (cfg_ladder_offense_root > 0 && !capture_count) {
-                auto depth = IsLadderChase(state.get(), child->m_move, &base_state);
-                if (depth >= cfg_ladder_offense_root) {
-#ifndef NDEBUG
-                    auto check_vertex = state->move_to_text(child->m_move);
-                    Utils::myprintf("shouldn't chase. %s depth count:%d\n",
-                        check_vertex.c_str(), depth);
-#endif
-                    state->undo_move();
-                    continue;
-                }
-            }
+            && !state.board.is_eye(state.get_to_move(), child->m_move)) {
             return child.get();
         }
     }
@@ -277,64 +228,4 @@ void UCTNode::prepare_root_node(Network& network, const int color,
         auto alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;
         dirichlet_noise(0.25f, alpha);
     }
-}
-
-UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
-    if (m_children.empty()) {
-        return nullptr;
-    }
-    if ((!cfg_ladder_defense_root && !cfg_ladder_offense_root)
-        || base_state.m_komove != FastBoard::NO_VERTEX) {
-        return m_children.front().get();
-    }
-
-    UCTNode* front_child = m_children.front().get();
-    if (front_child->m_move == FastBoard::PASS) {
-        return front_child;
-    }
-    auto state = std::make_unique<GameState>(base_state);
-    const auto turn_color = state->board.get_to_move();
-    for (const auto& child : m_children) {
-        if (child->m_move == FastBoard::PASS) {
-            return child.get();
-        } else {
-            auto capture_count = state->board.get_prisoners(turn_color);
-            state->play_move(turn_color, child->m_move);
-            capture_count = state->board.get_prisoners(turn_color) - capture_count;
-            auto stone_count = state->board.get_string_count(child->m_move);
-            if (cfg_ladder_defense_root > 0 &&
-                state->board.get_liberties(child->m_move) == 2 &&
-                stone_count > capture_count) {
-
-                if (stone_count >= cfg_defense_stones) {
-                    auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (depth < 0 &&
-                        -depth / 2 + stone_count > capture_count &&
-                        -depth >= cfg_ladder_defense_root) {
-#ifndef NDEBUG
-                        auto check_vertex = state->move_to_text(child->m_move);
-                        Utils::myprintf("can't escape. %s depth count:%d\n",
-                            check_vertex.c_str(), -depth);
-#endif
-                        state->undo_move();
-                        continue;
-                    }
-                }
-            }
-            if (cfg_ladder_offense_root > 0 && !capture_count) {
-                auto depth = IsLadderChase(state.get(), child->m_move, &base_state);
-                if (depth >= cfg_ladder_offense_root) {
-#ifndef NDEBUG
-                    auto check_vertex = state->move_to_text(child->m_move);
-                    Utils::myprintf("shouldn't chase. %s depth count:%d\n",
-                        check_vertex.c_str(), depth);
-#endif
-                    state->undo_move();
-                    continue;
-                }
-            }
-            return child.get();
-        }
-    }
-    return front_child;
 }
