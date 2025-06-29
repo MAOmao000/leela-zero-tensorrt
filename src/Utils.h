@@ -70,6 +70,9 @@ namespace Utils {
 
     void create_z_table();
     float cached_t_quantile(int v);
+
+    std::vector<float> softmax(const std::vector<float>& input,
+                               const float temperature = 1.0f);
 }
 
 #endif

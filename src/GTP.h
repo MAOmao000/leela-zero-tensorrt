@@ -40,6 +40,7 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
+#if defined(USE_TENSOR_RT)
 #include "NvInfer.h"
 
 namespace trtLog {
@@ -82,6 +83,7 @@ private:
     Severity mReportableSeverity;
 };
 }
+#endif
 
 struct MoveToAvoid {
     int color;
@@ -123,16 +125,13 @@ private:
 
 extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
-extern size_t cfg_num_threads;
-extern size_t cfg_batch_size;
-extern size_t cfg_gpu_batch;
-extern int cfg_batch_wait_time;
+extern unsigned int cfg_num_threads;
+extern unsigned int cfg_batch_size;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;
 extern size_t cfg_max_tree_size;
 extern int cfg_max_cache_ratio_percent;
-extern int cfg_z_entries;
 extern TimeManagement::enabled_t cfg_timemanage;
 extern int cfg_lagbuffer_cs;
 extern int cfg_resignpct;
@@ -142,25 +141,33 @@ extern int cfg_random_min_visits;
 extern float cfg_random_temp;
 extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
-extern int cfg_builder_opt_level;
+
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 extern std::vector<int> cfg_gpus;
-extern trtLog::Logger cfg_logger;
-enum class trtcache_t {
-    PLAN, TIMING
-};
-extern bool cfg_cache_plan;
+extern size_t cfg_gpu_batch;
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
+#if defined(USE_OPENCL)
+extern bool cfg_sgemm_exhaustive;
+extern bool cfg_tune_only;
+#endif
+#if defined(USE_TENSOR_RT)
+extern trtLog::Logger cfg_logger;
+extern int cfg_builder_opt_level;
+enum class trtcache_t {
+    PLAN, TIMING
+};
+extern bool cfg_cache_plan;
+#endif
+#endif
 
 extern float cfg_puct;
 extern float cfg_logpuct;
 extern float cfg_logconst;
 extern float cfg_dynamic_k_factor;
 extern float cfg_dynamic_k_base;
-extern float cfg_stdev_scale;
-extern float cfg_stdev_prior;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern float cfg_fpu_root_reduction;
@@ -180,13 +187,6 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_check_nodes;
 extern float cfg_ladder_penalty_winrate;
 extern float cfg_ladder_min_policy;
-extern int cfg_ladder_defense_root;
-extern int cfg_ladder_offense_root;
-extern float cfg_cut_policy;
-enum class style_t {
-    STANDARD, STABLE, RISKY
-};
-extern style_t cfg_play_style;
 
 extern AnalyzeTags cfg_analyze_tags;
 

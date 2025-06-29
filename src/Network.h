@@ -44,9 +44,20 @@
 #include "NNCache.h"
 #include "ForwardPipe.h"
 #include "GameState.h"
+#ifdef USE_OPENCL_SELFCHECK
+#include "SMP.h"
+#endif
+#include "Utils.h"
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto FILTER_SIZE = 3;
+constexpr auto WINOGRAD_M = 4;
+constexpr auto WINOGRAD_ALPHA = WINOGRAD_M + FILTER_SIZE - 1;
+constexpr auto WINOGRAD_WTILES =
+    BOARD_SIZE / WINOGRAD_M + (BOARD_SIZE % WINOGRAD_M != 0);
+constexpr auto WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
+constexpr auto WINOGRAD_P = WINOGRAD_WTILES * WINOGRAD_WTILES;
+constexpr auto SQ2 = 1.4142135623730951f; // Square root of 2
 
 class Network {
     using ForwardPipeWeights = ForwardPipe::ForwardPipeWeights;
@@ -65,7 +76,7 @@ public:
     bool get_output(const GameState* state, const Ensemble ensemble,
                     Network::Netresult& result, const bool full_batch,
                     const int symmetry = -1, const bool read_cache = true,
-                    const bool write_cache = true);
+                    const bool write_cache = true, const bool force_selfcheck = false);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -75,6 +86,9 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
+#if defined(USE_OPENCL)
+    float benchmark_time(int centiseconds);
+#endif
     void benchmark(const GameState* state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
@@ -89,6 +103,10 @@ public:
     size_t get_estimated_cache_size();
     void nncache_resize(int max_count);
     void nncache_clear();
+    void get_hit_rate() {
+        auto hit_rate = m_nncache.hit_rate();
+        Utils::myprintf_error("hits:%d lookups:%d\n", hit_rate.first, hit_rate.second);
+    }
 
     void drain_evals();
 
@@ -103,10 +121,15 @@ private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
 
+#if defined(USE_CPU_ONLY) || defined(USE_OPENCL)
+    static std::vector<float> winograd_transform_f(const std::vector<float>& f,
+                                                   int outputs, int channels);
+#endif
     bool get_output_internal(const GameState* state,
                              int symmetry,
                              Network::Netresult& result,
-                             const bool full_batch);
+                             const bool full_batch,
+                             bool selfcheck = false);
     void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
@@ -115,8 +138,14 @@ private:
     bool probe_cache(const GameState* state, Network::Netresult& result);
     std::unique_ptr<ForwardPipe>&& init_net(
         int channels, std::unique_ptr<ForwardPipe>&& pipe);
+#ifdef USE_HALF
     void select_precision(int channels);
+#endif
     std::unique_ptr<ForwardPipe> m_forward;
+#if defined(USE_OPENCL) && defined(USE_OPENCL_SELFCHECK)
+    void compare_net_outputs(const Netresult& data, const Netresult& ref);
+    std::unique_ptr<ForwardPipe> m_forward_cpu;
+#endif
 
     NNCache m_nncache;
 
@@ -125,24 +154,6 @@ private:
     // Residual tower
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
-    // Policy head
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w1{};
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w2{};
-
-    std::array<float, OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES>
-        m_ip_pol_w{};
-    std::array<float, POTENTIAL_MOVES> m_ip_pol_b{};
-
-    // Value head
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w1{};
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w2{};
-
-    std::array<float, OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER>
-        m_ip1_val_w{};
-    std::array<float, VALUE_LAYER> m_ip1_val_b{};
-
-    std::array<float, VALUE_LAYER> m_ip2_val_w{};
-    std::array<float, 1> m_ip2_val_b{};
     bool m_value_head_not_stm{};
 
     std::string m_model_hash{""};

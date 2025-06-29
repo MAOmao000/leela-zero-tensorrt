@@ -1,7 +1,6 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
-    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -55,32 +54,34 @@ using namespace Utils;
 
 static void license_blurb() {
     printf(
-        "Leela Zero 0.17  Copyright (C) 2017-2019  Gian-Carlo Pascutto and contributors\n"
-        "%s %s.%s  Copyright (C) 2024  MAOmao000 \n"
+        "Leela Zero next  Copyright (C) 2017-2019  Gian-Carlo Pascutto and contributors\n"
+        "%s %s.%s.%s  Copyright (C) 2025  MAOmao000 \n"
         "This program comes with ABSOLUTELY NO WARRANTY.\n"
         "This is free software, and you are welcome to redistribute it\n"
         "under certain conditions; see the COPYING file for details.\n\n",
-        PROGRAM_NAME, PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
+        PROGRAM_NAME, PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR, PROGRAM_VERSION_PATCH);
 }
 
+#if defined(USE_CPU_ONLY)
 static void calculate_thread_count_cpu(
     boost::program_options::variables_map& vm) {
     // If we are CPU-based, there is no point using more than the number of CPUs.
-    auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{ MAX_CPUS });
-    cfg_max_threads = std::max(cfg_max_threads, size_t{1});
+    auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
 
     if (vm["threads"].as<unsigned int>() > 0) {
         auto num_threads = vm["threads"].as<unsigned int>();
         if (num_threads > cfg_max_threads) {
             myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
-            num_threads = static_cast<unsigned int>(cfg_max_threads);
+            num_threads = cfg_max_threads;
         }
         cfg_num_threads = num_threads;
     } else {
-        cfg_num_threads = std::max(cfg_max_threads - 2, size_t{1});
+        cfg_num_threads = cfg_max_threads;
     }
 }
+#endif
 
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 static void calculate_thread_count_gpu(
     boost::program_options::variables_map& vm) {
     auto cfg_max_threads = size_t{MAX_CPUS};
@@ -99,14 +100,15 @@ static void calculate_thread_count_gpu(
         auto num_threads = vm["threads"].as<unsigned int>();
         if (num_threads > cfg_max_threads) {
             myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
-            num_threads = static_cast<unsigned int>(cfg_max_threads);
+            num_threads = cfg_max_threads;
         }
         cfg_num_threads = num_threads;
 
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size = (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
+            cfg_batch_size =
+                (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
                 / (gpu_count * cfg_gpu_batch);
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
@@ -117,22 +119,32 @@ static void calculate_thread_count_gpu(
     } else {
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
-            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * cfg_gpu_batch);
         } else {
-            calculate_thread_count_cpu(vm);
-            cfg_batch_size = cfg_num_threads / gpu_count / cfg_gpu_batch;
+            cfg_num_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
+            if (cfg_num_threads > 2) {
+                cfg_num_threads -= 2;
+            }
+            cfg_batch_size =
+                (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
+                / (gpu_count * cfg_gpu_batch);
+            // no idea why somebody wants to use threads less than the number of GPUs
+            // but should at least prevent crashing
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
     }
+
     if (cfg_num_threads < cfg_batch_size) {
         printf(
-            "Number of threads = %zd must be no smaller than batch size = %zd\n",
+            "Number of threads = %d must be no smaller than batch size = %d\n",
             cfg_num_threads, cfg_batch_size);
         exit(EXIT_FAILURE);
     }
 }
+#endif
 
 static void parse_commandline(const int argc, const char* const argv[]) {
     namespace po = boost::program_options;
@@ -152,7 +164,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                         "Safety margin for time usage in centiseconds.")
         ("resignpct,r", po::value<int>()->default_value(cfg_resignpct),
                         "Resign when winrate is less than x%.\n"
-                        "-1 uses 5% but scales for handicap.")
+                        "-1 uses 10% but scales for handicap.")
         ("weights,w", po::value<std::string>()->default_value(cfg_weightsfile),
                       "File with network weights.")
         ("logfile,l", po::value<std::string>(),
@@ -168,8 +180,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("noponder", "Disable thinking on opponent's time.")
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
-        ("trt_cache", po::value<std::string>()->default_value("plan"),
-                      "Which to use: plan cache or timing cache? (plan/timing)")
+
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -180,36 +191,35 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_check_nodes", po::value<int>()->default_value(cfg_ladder_check_nodes),
                       "Number of nodes to check ladder.")
-        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
+        ("ladder_penalty_winrate", po::value<float>(),
                       "The rate at which the ladder reduces the winning rate of the board.")
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
-        ("ladder_defense_root", po::value<int>()->default_value(cfg_ladder_defense_root),
-                      "Ladder defense check minimum depth of root.")
-        ("ladder_offense_root", po::value<int>()->default_value(cfg_ladder_offense_root),
-                      "Ladder offense check minimum depth of root.")
-        ("cut_policy", po::value<float>(),
-                      "Minimum policy when creating UCT nodes.")
-        ("play_style", po::value<std::string>()->default_value("standard"),
-                      "Leela Zero's play style (standard/stable/risky).")
-
-      ;
-    po::options_description gpu_desc("TensorRT device options");
+        ;
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+    po::options_description gpu_desc("GPU device options");
     gpu_desc.add_options()
         ("gpu", po::value<std::vector<int>>(),
-                "ID of the TensorRT device(s) to use (disables autodetection).")
+                "ID of the GPU device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
         ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
-        ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
-                      "Wait time (milli seconds) for full batch.")
-        ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
-                      "Builder optimization level.")
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
+#if defined(USE_OPENCL)
+        ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
+        ("tune-only", "Tune OpenCL only and then exit.")
+#endif
+#if defined(USE_TENSOR_RT)
+        ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
+                      "Builder optimization level.")
+        ("trt_cache", po::value<std::string>()->default_value("plan"),
+                      "Which to use: plan cache or timing cache? (plan/timing)")
+#endif
         ;
+#endif
     po::options_description selfplay_desc("Self-play options");
     selfplay_desc.add_options()
         ("noise,n", "Enable policy network randomization.")
@@ -222,6 +232,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                          "Don't play random moves if they have <= x visits.")
         ("randomtemp", po::value<float>()->default_value(cfg_random_temp),
                        "Temperature to use for random move selection.");
+
     po::options_description tuner_desc("Tuning options");
     tuner_desc.add_options()
         ("puct", po::value<float>())
@@ -229,25 +240,30 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logconst", po::value<float>())
         ("dynamic_k_factor", po::value<float>())
         ("dynamic_k_base", po::value<float>())
-        ("puct_stdev_scale", po::value<float>())
-        ("puct_stdev_prior", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
-        ("ci_alpha", po::value<float>())
-        ("z_entries", po::value<int>())
-        ("lcb_visits_ratio", po::value<float>());
+        ("ci_alpha", po::value<float>());
+
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
     po::options_description ignore("Ignored options");
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+    ignore.add_options()
+        ("batchsize", po::value<unsigned int>()->default_value(1),
+                      "Max batch size.");
+#endif
     po::options_description h_desc("Hidden options");
     h_desc.add_options()
         ("arguments", po::value<std::vector<std::string>>());
     po::options_description visible;
     visible
         .add(gen_desc)
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
         .add(gpu_desc)
+#endif
         .add(selfplay_desc)
         .add(tuner_desc);
+
     // Parse both the above, we will check if any of the latter are present.
     po::options_description all;
     all.add(visible).add(ignore).add(h_desc);
@@ -307,12 +323,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("dynamic_k_base")) {
         cfg_dynamic_k_base = vm["dynamic_k_base"].as<float>();
     }
-    if (vm.count("puct_stdev_scale")) {
-        cfg_stdev_scale = vm["puct_stdev_scale"].as<float>();
-    }
-    if (vm.count("puct_stdev_prior")) {
-        cfg_stdev_prior = vm["puct_stdev_prior"].as<float>();
-    }
     if (vm.count("softmax_temp")) {
         cfg_softmax_temp = vm["softmax_temp"].as<float>();
     }
@@ -321,12 +331,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("ci_alpha")) {
         cfg_ci_alpha = vm["ci_alpha"].as<float>();
-    }
-    if (vm.count("z_entries")) {
-        cfg_z_entries = vm["z_entries"].as<int>();
-    }
-    if (vm.count("lcb_visits_ratio")) {
-        cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
     }
 
     if (vm.count("logfile")) {
@@ -348,10 +352,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gtp_mode = true;
     }
 
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
-
     auto gpu_batch = vm["gpu_batch"].as<std::string>();
     if ("single" == gpu_batch) {
         cfg_gpu_batch = 1;
@@ -361,11 +365,42 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         printf("Unexpected option for --gpu_batch, single/double.\n");
         exit(EXIT_FAILURE);
     }
-
-    if (vm.count("batchwait")) {
-        cfg_batch_wait_time = vm["batchwait"].as<int>();
+    if (vm.count("precision")) {
+        auto precision = vm["precision"].as<std::string>();
+        if ("single" == precision) {
+            cfg_precision = precision_t::SINGLE;
+        } else if ("half" == precision) {
+            cfg_precision = precision_t::HALF;
+        } else if ("auto" == precision) {
+            cfg_precision = precision_t::AUTO;
+        } else {
+            printf("Unexpected option for --precision, expecting single/half/auto\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
+#if defined(USE_OPENCL)
+    if (vm.count("full-tuner")) {
+        if (cfg_precision == precision_t::AUTO) {
+            // Auto precision is not supported for full tuner cases.
+            printf("Automatic precision not supported when doing exhaustive tuning\n");
+            printf("Please add '--precision single' or '--precision half'\n");
+            exit(EXIT_FAILURE);
+        }
+        cfg_sgemm_exhaustive = true;
+        // --full-tuner auto-implies --tune-only.  The full tuner is so slow
+        // that nobody will wait for it to finish befure running a game.
+        // This simply prevents some edge cases from confusing other people.
+        cfg_tune_only = true;
+    }
+    if (vm.count("tune-only")) {
+        cfg_tune_only = true;
+    }
+    calculate_thread_count_gpu(vm);
+    myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
+#endif
+
+#if defined(USE_TENSOR_RT)
     if (vm.count("builder_opt_level")) {
         cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
     }
@@ -379,25 +414,15 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         printf("Unexpected option for --trt_cache, expecting plan/timing.\n");
         exit(EXIT_FAILURE);
     }
-
     calculate_thread_count_gpu(vm);
     myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
-    myprintf("Using %d thread(s).\n", cfg_num_threads);
+#endif
 
-    if (vm.count("precision")) {
-        auto precision = vm["precision"].as<std::string>();
-        if ("single" == precision) {
-            cfg_precision = precision_t::SINGLE;
-        } else if ("half" == precision) {
-            cfg_precision = precision_t::HALF;
-        } else if ("auto" == precision) {
-            // Auto precision is not supported for full tuner cases.
-            cfg_precision = precision_t::AUTO;
-        } else {
-            printf("Unexpected option for --precision, expecting single/half/auto\n");
-            exit(EXIT_FAILURE);
-        }
-    }
+#else
+    calculate_thread_count_cpu(vm);
+#endif
+
+    myprintf("Using %d thread(s).\n", cfg_num_threads);
 
     if (vm.count("seed")) {
         cfg_rng_seed = vm["seed"].as<std::uint64_t>();
@@ -534,32 +559,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_min_policy")) {
         cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
-    }
-
-    if (vm.count("ladder_defense_root")) {
-        cfg_ladder_defense_root = vm["ladder_defense_root"].as<int>();
-    }
-
-    if (vm.count("ladder_offense_root")) {
-        cfg_ladder_offense_root = vm["ladder_offense_root"].as<int>();;
-    }
-
-    if (vm.count("cut_policy")) {
-        cfg_cut_policy = vm["cut_policy"].as<float>();
-    }
-
-    if (vm.count("play_style")) {
-        auto play_style = vm["play_style"].as<std::string>();
-        if (play_style == "standard") {
-            cfg_play_style = style_t::STANDARD;
-        } else if (play_style == "stable") {
-            cfg_play_style = style_t::STABLE;
-        } else if (play_style == "risky") {
-            cfg_play_style = style_t::RISKY;
-        } else {
-            printf("Invalid play_style value.\n");
-            exit(EXIT_FAILURE);
-        }
     }
 
     auto out = std::stringstream{};

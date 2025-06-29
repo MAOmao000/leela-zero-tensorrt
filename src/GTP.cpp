@@ -60,16 +60,13 @@ using namespace Utils;
 // Configuration flags
 bool cfg_gtp_mode;
 bool cfg_allow_pondering;
-size_t cfg_num_threads;
-size_t cfg_batch_size;
-size_t cfg_gpu_batch;
-int cfg_batch_wait_time;
+unsigned int cfg_num_threads;
+unsigned int cfg_batch_size;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
 size_t cfg_max_tree_size;
 int cfg_max_cache_ratio_percent;
-int cfg_z_entries;
 TimeManagement::enabled_t cfg_timemanage;
 int cfg_lagbuffer_cs;
 int cfg_resignpct;
@@ -79,16 +76,25 @@ int cfg_random_min_visits;
 float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
-int cfg_builder_opt_level;
+
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 std::vector<int> cfg_gpus;
-trtLog::Logger cfg_logger{};
-bool cfg_cache_plan;
+size_t cfg_gpu_batch;
 precision_t cfg_precision;
+#if defined(USE_OPENCL)
+bool cfg_sgemm_exhaustive;
+bool cfg_tune_only;
+#endif
+#if defined(USE_TENSOR_RT)
+trtLog::Logger cfg_logger{};
+int cfg_builder_opt_level;
+bool cfg_cache_plan;
+#endif
+#endif
+
 float cfg_puct;
 float cfg_logpuct;
 float cfg_logconst;
-float cfg_stdev_scale;
-float cfg_stdev_prior;
 float cfg_dynamic_k_factor;
 float cfg_dynamic_k_base;
 float cfg_softmax_temp;
@@ -110,10 +116,6 @@ int cfg_offense_stones;
 int cfg_ladder_check_nodes;
 float cfg_ladder_penalty_winrate;
 float cfg_ladder_min_policy;
-int cfg_ladder_defense_root;
-int cfg_ladder_offense_root;
-float cfg_cut_policy;
-style_t cfg_play_style;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -333,66 +335,66 @@ void GTP::initialize(std::unique_ptr<Network>&& net) {
 }
 
 void GTP::setup_default_parameters() {
-    cfg_gtp_mode = false;       // -g, --gtp
-    cfg_allow_pondering = true; // --noponder
+    cfg_gtp_mode = false;
+    cfg_allow_pondering = true;
 
     // we will re-calculate this on Leela.cpp
-    cfg_num_threads = 1;        // -t, --threads
+    cfg_num_threads = 1;
     // we will re-calculate this on Leela.cpp
-    cfg_batch_size = 1;         // --batchsize
-    cfg_gpu_batch = 1;          // --gpu_batch
-    cfg_batch_wait_time = 0;    // --batchwait
+    cfg_batch_size = 1;
 
-    cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
-    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
-    cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;    // -v, --visits
+    cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;
+    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
+    cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
     // This will be overwriiten in initialize() after network size is known.
-    cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
-    cfg_max_cache_ratio_percent = 10;      // fix
-    cfg_z_entries = 1000;                  // --z_entries
-    cfg_timemanage = TimeManagement::AUTO; // --timemanage
-    cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
-    cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
-    cfg_builder_opt_level = 2;     // --builder_opt_level [0-5]
-    cfg_gpus = {};                 // --gpu
-    cfg_cache_plan = true;         // --trt_cache
+    cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
+    cfg_max_cache_ratio_percent = 10;
+    cfg_timemanage = TimeManagement::AUTO;
+    cfg_lagbuffer_cs = 100;
+    cfg_weightsfile = leelaz_file("best-network");
 
-    cfg_precision = precision_t::AUTO;   // --precision
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+    cfg_gpus = {};
+    cfg_precision = precision_t::AUTO;
+    cfg_gpu_batch = 1;
+#if defined(USE_OPENCL)
+    cfg_sgemm_exhaustive = false;
+    cfg_tune_only = false;
+#endif
+#if defined(USE_TENSOR_RT)
+    cfg_builder_opt_level = 2;
+    cfg_cache_plan = true;
+#endif
+#endif
 
-    cfg_puct = 0.5f;               // --puct(No significant difference between 0.5 and 0.8)
-    cfg_logpuct = 0.015f;          // --logpuct
-    cfg_logconst = 1.7f;           // --logconst
-    cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
-    cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
-    cfg_stdev_scale = 0.85f;       // --puct_stdev_scale
-    cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
-    cfg_softmax_temp = 1.0f;       // --softmax_temp
-    cfg_fpu_reduction = 0.25f;     // --fpu_reduction
+    cfg_puct = 0.5f;
+    cfg_logpuct = 0.015f;
+    cfg_logconst = 1.7f;
+    cfg_dynamic_k_factor = 4.0f;
+    cfg_dynamic_k_base = 20000.0f;
+    cfg_softmax_temp = 1.0f;
+    cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign
-    cfg_resignpct = -1;              // -r, --resignpct
-    cfg_noise = false;               // --noise
-    cfg_fpu_root_reduction = cfg_fpu_reduction; // --noise
-    cfg_ci_alpha = 1e-5f;            // --ci_alpha
-    cfg_lcb_min_visit_ratio = 0.10f; // --lcb_visits_ratio
-    cfg_random_cnt = 0;              // -m, --randomcnt
-    cfg_random_min_visits = 1;       // --randomvisits
-    cfg_random_temp = 1.0f;          // --randomtemp
-    cfg_dumbpass = false;            // -d, --dumbpass
-    cfg_logfile_handle = nullptr;    // -l, --logfile
-    cfg_quiet = false;               // -q, --quiet
-    cfg_benchmark = false;           // --benchmark
+    cfg_resignpct = -1;
+    cfg_noise = false;
+    cfg_fpu_root_reduction = cfg_fpu_reduction;
+    cfg_ci_alpha = 1e-5f;
+    cfg_lcb_min_visit_ratio = 0.10f;
+    cfg_random_cnt = 0;
+    cfg_random_min_visits = 1;
+    cfg_random_temp = 1.0f;
+    cfg_dumbpass = false;
+    cfg_logfile_handle = nullptr;
+    cfg_quiet = false;
+    cfg_benchmark = false;
 
-    cfg_ladder_defense = 11;            // --ladder_defense
-    cfg_ladder_offense = 8;             // --ladder_offense
-    cfg_defense_stones = 4;             // --defense_stones
-    cfg_offense_stones = 4;             // --offense_stones
-    cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
-    cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
-    cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
-    cfg_ladder_defense_root = 0;        // --ladder_defense_root
-    cfg_ladder_offense_root = 0;        // --ladder_offense_root
-    cfg_cut_policy = 0.005f;            // --cut_policy
-    cfg_play_style = style_t::STABLE;   // --play_style
+    cfg_ladder_defense = 11;
+    cfg_ladder_offense = 8;
+    cfg_defense_stones = 4;
+    cfg_offense_stones = 4;
+    cfg_ladder_check_nodes = 10;
+    cfg_ladder_penalty_winrate = 0.9f;
+    cfg_ladder_min_policy = 0.0005f;
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -405,7 +407,7 @@ void GTP::setup_default_parameters() {
     // If the above fails, this is one of our best, portable, bets.
     std::uint64_t seed2 =
         std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    cfg_rng_seed = seed1 ^ seed2; // -s, --seed
+    cfg_rng_seed = seed1 ^ seed2;
 }
 
 const std::string GTP::s_commands[] = {
@@ -552,7 +554,8 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         gtp_printf(id, PROGRAM_NAME);
         return;
     } else if (command == "version") {
-        gtp_printf(id, "%s.%s", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
+        gtp_printf(id, "%s.%s.%s",
+            PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR, PROGRAM_VERSION_PATCH);
         return;
     } else if (command == "quit") {
         gtp_printf(id, "");
@@ -893,15 +896,15 @@ void GTP::execute(GameState& game, const std::string& xinput) {
                                         Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false, s,
-                                            false);
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
+                                            s, false);
                 if (ret) {
                     Network::show_heatmap(&game, vec, false);
                 }
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, false, -1,
-                                        false);
+            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, false,
+                                        -1, false);
         } else {
             ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
                                         std::stoi(symmetry), false);

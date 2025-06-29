@@ -37,11 +37,10 @@
 #include <vector>
 
 #include "ForwardPipe.h"
-#include "Backend.h"
+#include "BackendTensorRT.h"
 #include "GTP.h"
 #include "SMP.h"
 #include "ThreadPool.h"
-#include "Backend.h"
 
 template <typename net_t>
 class GPUScheduler : public ForwardPipe {
@@ -49,16 +48,19 @@ class GPUScheduler : public ForwardPipe {
     public:
         std::mutex mutex;
         std::condition_variable cv;
+        const bool full_batch;
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
         ForwardQueueEntry(
             const std::vector<float>& input,
             std::vector<float>& output_pol,
-            std::vector<float>& output_val)
-            : in(input),
-              out_p(output_pol),
-              out_v(output_val) {}
+            std::vector<float>& output_val,
+            const bool full)
+                : full_batch(full),
+                in(input),
+                out_p(output_pol),
+                out_v(output_val) {}
     };
 
 public:
@@ -66,6 +68,7 @@ public:
     ~GPUScheduler() override;
 
     virtual void initialize(
+        const int channels,
         const NetworkType net_type,
         const std::string &model_hash = nullptr
     ) override;
@@ -82,14 +85,8 @@ public:
         std::vector<float>& output_val,
         const bool full_batch
     ) override;
-    void batch_worker(
-        const size_t gnum,
-        const size_t tid = -1
-    );
 
 private:
-    void drain() override;
-    void resume() override;
     virtual void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
@@ -117,18 +114,23 @@ private:
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
+    void batch_worker(
+        const size_t gnum,
+        const size_t tid = -1
+    );
+    void drain() override;
+    void resume() override;
 
-    std::atomic<bool> m_draining{false};
-    std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
-    std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
-
-protected: // Member variables used by GPUSheduler
     bool m_running = true;
+    std::atomic<bool> m_draining{false};
+    std::vector<std::unique_ptr<BackendTRT<net_t>>> m_backend;
+
     std::mutex m_mutex;
     std::condition_variable m_cv;
+
+    std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
     std::list<std::thread> m_worker_threads;
-    size_t m_out_pol_size{};
-    size_t m_out_val_size{};
+
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 #endif

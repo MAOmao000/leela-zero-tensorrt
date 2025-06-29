@@ -30,6 +30,15 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
+#if defined(USE_TENSOR_RT)
+#undef USE_CPU_ONLY
+#undef USE_OPENCL
+#elif defined(USE_OPENCL)
+#undef USE_CPU_ONLY
+#elif !defined(USE_CPU_ONLY)
+#define USE_CPU_ONLY
+#endif
+
 /*
  * We need to check for input while we are thinking.
  * That code isn't portable, so select something appropriate for the system.
@@ -64,22 +73,38 @@ enum class NetworkType {
     LEELA_ZERO, MINIGO_SE
 };
 
+static constexpr auto PROGRAM_NAME = "Leela Zero";
+static constexpr auto PROGRAM_VERSION_MAJOR = "2";
+static constexpr auto PROGRAM_VERSION_MINOR = "0";
+static constexpr auto PROGRAM_VERSION_PATCH = "0";
+
 /*
- * USE_TUNER: Expose some extra command line parameters that allow tuning the
- * search algorithm.
+ * OpenBLAS limitation: the default configuration on some Linuxes
+ * is limited to 64 cores.
  */
-#define USE_TUNER
-
-static constexpr auto PROGRAM_NAME = "Leela Zero(TensorRT ladder detection)";
-static constexpr auto PROGRAM_VERSION_MAJOR = "1";
-static constexpr auto PROGRAM_VERSION_MINOR = "4";
-
 static constexpr auto MAX_CPUS = 256;
 
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+/*
+ * USE_HALF: Include the half-precision OpenCL implementation when building.
+ * The current implementation autodetects whether half-precision is better
+ * or single-precision is better (half precision is chosen if it's 5% faster)
+ * Half-precision OpenCL gains performance on some GPUs while losing some
+ * accuracy on the calculation, but generally it is worth using half precision
+ * if it is at least 5% faster.
+ */
+#define USE_HALF
 #include "half/half.hpp"
+#endif
 
-#if (_MSC_VER >= 1400) /* VC8+ Disable all deprecation warnings */
+#if defined(USE_OPENCL) && defined(USE_OPENCL_SELFCHECK)
+// If OpenCL are fully usable, then check the OpenCL against CPU
+// implementation with some probability.
+static constexpr auto SELFCHECK_PROBABILITY = 2000;
+#endif
+
+#if (_MSC_VER >= 1900) /* VC14+ Disable all deprecation warnings */
 #pragma warning(disable : 4996)
-#endif /* VC8+ */
+#endif /* VC14+ */
 
 #endif

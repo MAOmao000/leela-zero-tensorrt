@@ -29,6 +29,8 @@
 */
 #include "config.h"
 
+#if defined(USE_TENSOR_RT)
+
 #include "GPUScheduler.h"
 #include "BackendTensorRT.h"
 #include "Network.h"
@@ -45,8 +47,6 @@ GPUScheduler<net_t>::GPUScheduler()
     if (gpus.empty()) {
         gpus = {-1};
     }
-    m_out_pol_size = POTENTIAL_MOVES;
-    m_out_val_size = 1;
 
     auto silent{false};
     for (auto gpu : gpus) {
@@ -59,28 +59,29 @@ GPUScheduler<net_t>::GPUScheduler()
 
 template <typename net_t>
 void GPUScheduler<net_t>::initialize(
+    const int channels,
     const NetworkType net_type,
     const std::string &model_hash)
 {
+    // For compatibility with OpenCL implementation
+    (void) channels;
+
     m_net_type = net_type;
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the
     // GPU.
-    size_t gpus_size;
-    if (cfg_gpus.empty()) {
-        gpus_size = 1;
-    } else {
-        gpus_size = cfg_gpus.size();
-    }
     auto num_worker_threads =
-        cfg_num_threads / cfg_batch_size / (gpus_size + 1) + 1;
-    for (auto gnum = size_t{0}; gnum < gpus_size; gnum++) {
-        m_backend[gnum]->initialize(net_type, num_worker_threads, model_hash);
+        cfg_num_threads / cfg_batch_size / (m_backend.size() + 1) + 1;
+    auto gnum = 0;
+    for (auto& backend : m_backend) {
+        backend->initialize(net_type, num_worker_threads, model_hash);
+
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =
                 std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
             m_worker_threads.push_back(std::move(t));
         }
+        gnum++;
     }
 }
 
@@ -314,7 +315,7 @@ bool GPUScheduler<net_t>::forward(
         return false;
     }
     auto entry =
-        std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
+        std::make_shared<ForwardQueueEntry>(input, output_pol, output_val, full_batch);
     size_t queue_size = 0;
     std::unique_lock<std::mutex> lk(entry->mutex);
     {
@@ -339,66 +340,37 @@ void GPUScheduler<net_t>::batch_worker(
     const size_t tid)
 {
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
+    constexpr auto out_pol_size = POTENTIAL_MOVES;
+    constexpr auto out_val_size = 1;
     // Returns the batch picked up from the queue (m_forward_queue)
     auto pickup_task = [this]() {
-        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
-        size_t count = 0;
-        std::unique_lock<std::mutex> lk(m_mutex);
-        while (true) {
-            if (!m_running) {
-                return inputs;
-            }
-            count = m_forward_queue.size();
-            if (count >= cfg_batch_size) {
-                count = cfg_batch_size;
-                break;
-            }
-            bool timeout = !m_cv.wait_for(
-                lk, std::chrono::milliseconds(cfg_batch_wait_time), [this]() {
-                    return !m_running
-                           || m_forward_queue.size() >= cfg_batch_size;
-                }
-            );
-            if (!m_forward_queue.empty()) {
-                if (timeout) {
-                    count = std::min(cfg_batch_size, m_forward_queue.size());
-                    break;
-                }
-            }
-        }
-        if (!m_running) {
-            return inputs;
-        }
-        // Move 'count' evals from shared queue to local list.
-        auto end = begin(m_forward_queue);
-        std::advance(end, count);
-        std::move(begin(m_forward_queue), end, std::back_inserter(inputs));
-        m_forward_queue.erase(begin(m_forward_queue), end);
-        return inputs;
-    };
-    // Returns the batch picked up from the queue (m_forward_queue)
-    auto pickup_task_wait = [this]() {
+
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
         std::unique_lock<std::mutex> lk(m_mutex);
         m_cv.wait(lk, [this] {
             return !m_running ||
                 m_draining.load() ||
                 m_forward_queue.size() >= cfg_batch_size ||
-                m_forward_queue.size() == 1;
+                (m_forward_queue.size() == 1 && !m_forward_queue.front()->full_batch);
         });
+        // first:  m_running:true  m_draining:false m_forward_queue.size:1
+        // second: m_running:true  m_draining:false m_forward_queue.size:10
+        // next:   m_running:true  m_draining:false m_forward_queue.size:10
+        // drain:  m_running:true  m_draining:true  m_forward_queue.size:0-10
+        // next:   m_running:true  m_draining:true  m_forward_queue.size:0
+        // quit:   m_running:false m_draining:false m_forward_queue.size:0
         if (!m_running) {
             return inputs;
         }
-        auto count = std::min(cfg_batch_size, m_forward_queue.size());
+        auto count = m_forward_queue.size();
         if (!count) {
             return inputs;
+        } else if (count >= static_cast<size_t>(cfg_batch_size)) {
+            count = cfg_batch_size;
+        } else if (!m_draining.load() &&
+            m_forward_queue.front()->full_batch) {
+            return inputs;
         }
-        //if (count < cfg_batch_size) {
-        //    lk.unlock();
-        //    std::this_thread::yield();
-        //    lk.lock();
-        //    count = std::min(cfg_batch_size, m_forward_queue.size());
-        //}
         // Move 'count' evals from shared queue to local list.
         auto end = begin(m_forward_queue);
         std::advance(end, count);
@@ -407,15 +379,11 @@ void GPUScheduler<net_t>::batch_worker(
         return inputs;
     };
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
-    auto batch_output_pol = std::vector<float>(m_out_pol_size * cfg_batch_size);
-    auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
+    auto batch_output_pol = std::vector<float>(out_pol_size * cfg_batch_size);
+    auto batch_output_val = std::vector<float>(out_val_size * cfg_batch_size);
     while (true) {
-        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
-        if (cfg_batch_wait_time) {
-            inputs = pickup_task();
-        } else {
-            inputs = pickup_task_wait();
-        }
+        auto inputs = pickup_task();
+
         if (!m_running) {
             return;
         }
@@ -425,8 +393,8 @@ void GPUScheduler<net_t>::batch_worker(
         }
         // prepare input for forward() call
         batch_input.resize(in_size * count);
-        batch_output_pol.resize(m_out_pol_size * count);
-        batch_output_val.resize(m_out_val_size * count);
+        batch_output_pol.resize(out_pol_size * count);
+        batch_output_val.resize(out_val_size * count);
         auto index = size_t{0};
         for (auto& x : inputs) {
             std::unique_lock<std::mutex> lk(x->mutex);
@@ -448,20 +416,20 @@ void GPUScheduler<net_t>::batch_worker(
             );
         } else {
             for (size_t i = 0; i < index; i++) {
-                batch_output_pol[m_out_pol_size * i] = -1.0f;
+                batch_output_pol[out_pol_size * i] = -1.0f;
             }
         }
         // Get output and copy back
         index = 0;
         for (auto& x : inputs) {
             std::copy(
-                begin(batch_output_pol) + m_out_pol_size * index,
-                begin(batch_output_pol) + m_out_pol_size * (index + 1),
+                begin(batch_output_pol) + out_pol_size * index,
+                begin(batch_output_pol) + out_pol_size * (index + 1),
                 begin(x->out_p)
             );
             std::copy(
-                begin(batch_output_val) + m_out_val_size * index,
-                begin(batch_output_val) + m_out_val_size * (index + 1),
+                begin(batch_output_val) + out_val_size * index,
+                begin(batch_output_val) + out_val_size * (index + 1),
                 begin(x->out_v)
             );
             x->cv.notify_all();
@@ -493,3 +461,5 @@ void GPUScheduler<net_t>::resume()
 
 template class GPUScheduler<float>;
 template class GPUScheduler<half_float::half>;
+
+#endif

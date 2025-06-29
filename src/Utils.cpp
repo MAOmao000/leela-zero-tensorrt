@@ -50,14 +50,15 @@
 
 Utils::ThreadPool thread_pool;
 
-std::vector<float> z_lookup;
+auto constexpr z_entries = 1000;
+std::array<float, z_entries> z_lookup;
 
 void Utils::create_z_table() {
-    for (auto i = 1; i < cfg_z_entries + 1; i++) {
+    for (auto i = 1; i < z_entries + 1; i++) {
         boost::math::students_t dist(i);
         auto z =
             boost::math::quantile(boost::math::complement(dist, cfg_ci_alpha));
-        z_lookup.emplace_back(float(z));
+        z_lookup[i - 1] = z;
     }
 }
 
@@ -65,13 +66,13 @@ float Utils::cached_t_quantile(const int v) {
     if (v < 1) {
         return z_lookup[0];
     }
-    if (v < cfg_z_entries) {
+    if (v < z_entries) {
         return z_lookup[v - 1];
     }
     // z approaches constant when v is high enough.
     // With default lookup table size the function is flat enough that we
     // can just return the last entry for all v bigger than it.
-    return z_lookup[cfg_z_entries - 1];
+    return z_lookup[z_entries - 1];
 }
 
 bool Utils::input_pending() {
@@ -233,4 +234,26 @@ std::string Utils::leelaz_file(const std::string& file) {
     boost::filesystem::create_directories(dir);
     dir /= file;
     return dir.string();
+}
+
+std::vector<float> Utils::softmax(const std::vector<float>& input,
+                                  const float temperature) {
+
+    auto output = std::vector<float>{};
+    output.reserve(input.size());
+
+    const auto alpha = *std::max_element(cbegin(input), cend(input));
+    auto denom = 0.0f;
+
+    for (const auto in_val : input) {
+        auto val = std::exp((in_val - alpha) / temperature);
+        denom += val;
+        output.push_back(val);
+    }
+
+    for (auto& out : output) {
+        out /= denom;
+    }
+
+    return output;
 }

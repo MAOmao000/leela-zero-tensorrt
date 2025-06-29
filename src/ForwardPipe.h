@@ -1,7 +1,6 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
-    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,6 +34,7 @@
 
 #include <memory>
 #include <vector>
+#include <string>
 
 class ForwardPipe {
 public:
@@ -71,8 +71,9 @@ public:
 
     virtual ~ForwardPipe() = default;
 
-    virtual void initialize(const NetworkType net_type, const std::string &model_hash = "") = 0;
-
+    virtual void initialize(const int channels,
+                            const NetworkType net_type,
+                            const std::string &model_hash = "") = 0;
     virtual bool needs_autodetect() {
         return false;
     };
