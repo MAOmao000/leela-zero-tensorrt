@@ -39,12 +39,6 @@
 #include <random>
 #include <sstream>
 #include <string>
-#ifndef USE_BLAS
-#ifdef NDEBUG
-#define EIGEN_NO_DEBUG // Disable assertions in your code．
-#endif
-#include <Eigen/Dense>
-#endif
 
 #include "GTP.h"
 #include "OpenCL.h"
@@ -55,14 +49,6 @@
 const auto TUNER_FILE_LOCAL = std::string("leelaz_opencl_tuning");
 
 template <typename net_t> std::vector<std::string> Tuner<net_t>::tuned_devices;
-
-#ifndef USE_BLAS
-// Eigen helpers
-template <typename T> using EigenMatrixMap =
-    Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
-template <typename T> using ConstEigenMatrixMap =
-    Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
-#endif
 
 template <typename net_t> static std::string getTunerKernel();
 template <typename net_t> static float getTunerMaxError();
@@ -108,7 +94,6 @@ static void sgemmBatched_ref(const std::vector<net_t>& a,
         auto offset_u = batch * m * k;
         auto offset_v = batch * n * k;
         auto offset_m = batch * m * n;
-#ifdef USE_BLAS
         // Calculates C = transpose(tranpose(A) * B) in row major, or
         // C = A * transpose(B) in column major.
         for (auto i = 0; i < m; i++) {
@@ -120,12 +105,6 @@ static void sgemmBatched_ref(const std::vector<net_t>& a,
                 cr[j * m + i + offset_m] = acc;
             }
         }
-#else
-        auto C = EigenMatrixMap<float>(cr.data() + offset_m, m, n);
-        auto A = ConstEigenMatrixMap<float>(ar.data() + offset_u, m, k);
-        auto B = ConstEigenMatrixMap<float>(br.data() + offset_v, n, k);
-        C.noalias() = (A * B.transpose());
-#endif
     }
 
     std::copy(begin(cr), end(cr), begin(c));

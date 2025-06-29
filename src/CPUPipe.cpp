@@ -521,10 +521,15 @@ bool CPUPipe::forward(const std::vector<float>& input,
     return true;
 }
 
-void CPUPipe::push_weights(const unsigned int /*filter_size*/,
-                           const unsigned int /*channels*/,
+void CPUPipe::push_weights(const unsigned int filter_size,
+                           const unsigned int channels,
                            const unsigned int outputs,
                            const std::shared_ptr<const ForwardPipeWeights> weights) {
+
+    // For compatibility with GPU backend implementation
+    (void) filter_size;
+    (void) channels;
+    (void) outputs;
 
     m_weights = weights;
 }

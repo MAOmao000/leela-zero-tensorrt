@@ -33,6 +33,7 @@
 
 #include <cassert>
 #include <vector>
+#include <cmath>
 
 #if defined(__APPLE__) || defined(__MACOSX)
 #include <Accelerate/Accelerate.h>
