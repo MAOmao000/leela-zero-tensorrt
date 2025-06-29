@@ -1,3 +1,5 @@
+#if defined(USE_TENSOR_RT)
+
 #include "sha2.h"
 
 /*
@@ -621,7 +623,7 @@ static void SHA256_Update(SHA256_CTX* context, const sha2_byte *data, size_t len
     if (len >= freespace) {
       /* Fill the buffer completely and process it */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, freespace);
-      context->bitcount += freespace << 3;
+      context->bitcount += freespace & ~0xe0000000 << 3;
       len -= freespace;
       data += freespace;
       SHA256_Transform(context, (sha2_word32*)context->buffer);
@@ -948,7 +950,7 @@ static void SHA512_Update(SHA512_CTX* context, const sha2_byte *data, size_t len
     if (len >= freespace) {
       /* Fill the buffer completely and process it */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, freespace);
-      ADDINC128(context->bitcount, freespace << 3);
+      ADDINC128(context->bitcount, freespace & ~0xe0000000 << 3);
       len -= freespace;
       data += freespace;
       SHA512_Transform(context, (sha2_word64*)context->buffer);
@@ -1271,6 +1273,4 @@ void SHA2::get512(const uint32_t* msg, size_t len, uint8_t hash[64]) {CONVERTMSG
 void SHA2::get512(const uint32_t* msg, size_t len, uint32_t hash[16]) {CONVERTMSG32(get512);}
 void SHA2::get512(const uint32_t* msg, size_t len, uint64_t hash[8]) {CONVERTMSG32(get512);}
 
-
-
-
+#endif

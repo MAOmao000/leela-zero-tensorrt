@@ -381,10 +381,7 @@ void FastBoard::merge_strings(const int ip, const int aip) {
     } while (newpos != aip);
 
     /* merge stings */
-    using std::swap;
-    if (aip != ip) {
-        swap(m_next[aip], m_next[ip]);
-    }
+    std::swap(m_next[aip], m_next[ip]);
 }
 
 bool FastBoard::is_eye(const int color, const int i) const {
