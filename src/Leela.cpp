@@ -203,16 +203,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 "ID of the GPU device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-        ("gpu_batch", po::value<std::string>()->default_value("single"),
-                      "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
 #if defined(USE_OPENCL)
+        ("gpu_batch", po::value<std::string>()->default_value("double"),
+                      "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
         ("tune-only", "Tune OpenCL only and then exit.")
 #endif
 #if defined(USE_TENSOR_RT)
+        ("gpu_batch", po::value<std::string>()->default_value("single"),
+                      "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
         ("trt_cache", po::value<std::string>()->default_value("plan"),
@@ -244,14 +246,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("fpu_reduction", po::value<float>())
         ("ci_alpha", po::value<float>());
 
-    // These won't be shown, we use them to catch incorrect usage of the
-    // command line.
-    po::options_description ignore("Ignored options");
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
-    ignore.add_options()
-        ("batchsize", po::value<unsigned int>()->default_value(1),
-                      "Max batch size.");
-#endif
     po::options_description h_desc("Hidden options");
     h_desc.add_options()
         ("arguments", po::value<std::vector<std::string>>());
@@ -266,7 +260,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     // Parse both the above, we will check if any of the latter are present.
     po::options_description all;
-    all.add(visible).add(ignore).add(h_desc);
+    all.add(visible).add(h_desc);
     po::positional_options_description p_desc;
     p_desc.add("arguments", -1);
     po::variables_map vm;
