@@ -46,7 +46,7 @@
 #include "Tuner.h"
 #include "Utils.h"
 
-const auto TUNER_FILE_LOCAL = std::string("leelaz_opencl_tuning");
+const auto TUNER_FILE_LOCAL = std::string("leelaz_opencl_ladder_tuning");
 
 template <typename net_t> std::vector<std::string> Tuner<net_t>::tuned_devices;
 
@@ -671,6 +671,19 @@ template <typename net_t>
 std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
                                             const int k, const int batch_size) {
     auto tuner_file = leelaz_file(TUNER_FILE_LOCAL);
+#ifdef _WIN32
+    HANDLE hFile = Utils::lockFile(tuner_file);
+    if (!hFile) {
+        myprintf_error("Could not lock the tuning file.\n");
+        exit(EXIT_FAILURE);
+    }
+#else
+    int fd = Utils::lockFile(tuner_file);
+    if (fd == -1) {
+        myprintf_error("Could not lock the tuning file.\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
     auto file = std::ifstream{tuner_file};
 
     auto try_prior_tuning = file.good();
@@ -693,12 +706,22 @@ std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
             auto tuners = sgemm_tuners_from_line(line, m, n, k, batch_size);
             if (tuners.size() != 0) {
                 myprintf("Loaded existing SGEMM tuning.\n");
+#ifdef _WIN32
+                Utils::unlockFile(hFile);
+#else
+                Utils::unlockFile(fd);
+#endif
                 return tuners;
             }
         }
     }
     auto tuners = tune_sgemm(m, n, k, batch_size);
     store_sgemm_tuners(m, n, k, batch_size, tuners);
+#ifdef _WIN32
+    Utils::unlockFile(hFile);
+#else
+    Utils::unlockFile(fd);
+#endif
     return tuners;
 }
 

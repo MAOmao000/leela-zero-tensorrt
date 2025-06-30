@@ -36,6 +36,16 @@
 #include <limits>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pwd.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
+#endif
+
 #include "ThreadPool.h"
 
 extern Utils::ThreadPool thread_pool;
@@ -73,6 +83,14 @@ namespace Utils {
 
     std::vector<float> softmax(const std::vector<float>& input,
                                const float temperature = 1.0f);
+
+#ifdef _WIN32
+    HANDLE lockFile(const std::string& file);
+    void unlockFile(HANDLE hFile);
+#else
+    int lockFile(const std::string& file);
+    void unlockFile(int fd);
+#endif
 }
 
 #endif
