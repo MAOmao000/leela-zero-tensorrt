@@ -207,7 +207,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
 #if defined(USE_OPENCL)
-        ("gpu_batch", po::value<std::string>()->default_value("double"),
+        ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
         ("tune-only", "Tune OpenCL only and then exit.")
