@@ -7,8 +7,8 @@ The following fixes have been made to the Leela Zero next branch.
 - Neural network inference is performed using TensorRT.
 - The neural network inference process is based on KataGo's trtbackend.cpp, sha2.cpp and sha2.h. See https://github.com/lightvector/KataGo.
 - Supports converted weights for Leela Zero in MiniGo v17 using Squeeze-and-Excitation Networks.
-~~- Converted recursive logic to non-recursive logic.
-~~- The threshold for the win rate for the default surrender condition was changed from 10% to 5%.
+- ~~Converted recursive logic to non-recursive logic.
+- ~~The threshold for the win rate for the default surrender condition was changed from 10% to 5%.
 - The default batch size was changed from 1/2 the number of search threads to the same number of search threads.
 - The number of sentinels on the board was reduced by one vertical column.
 - ISO C++ 17 standard is now supported.
