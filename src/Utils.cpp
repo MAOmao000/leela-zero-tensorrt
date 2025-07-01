@@ -277,9 +277,9 @@ HANDLE Utils::lockFile(const std::string& file) {
     return hFile;
 #else
 int Utils::lockFile(const std::string& file) {
-    int fd = open(file.c_str(), O_RDWR | O_CREAT, S_IREAD | S_IWRITE);
+    int fd = open(file.c_str(), O_RDWR | O_CREAT, 0664);
     if (fd == -1) {
-        return fd;
+        return -1;
     }
     struct flock fl;
     fl.l_type = F_WRLCK;

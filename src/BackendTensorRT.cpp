@@ -341,7 +341,7 @@ bool BackendTRT<net_t>::build(
 #ifdef _WIN32
             Utils::unlockFile(hFile);
 #else
-            Utils::lockFile(fd);
+            Utils::unlockFile(fd);
 #endif
         } else {
             auto timingCacheFile = strprintf(
