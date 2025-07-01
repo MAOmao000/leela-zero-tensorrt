@@ -12,6 +12,7 @@ The following fixes have been made to the Leela Zero next branch.
 - The default batch size was changed from 1/2 the number of search threads to the same number of search threads.
 - The number of sentinels on the board was reduced by one vertical column.
 - ISO C++ 17 standard is now supported.
+
 (add, 2025/07/02)
 - Matrix calculation libraries EIGEN and OPENBLAS will be replaced with Intel's DNNL (oneDNN).
 - Inference calculations in MCTS look-ahead simulations use batch processing without using timers.
