@@ -74,7 +74,7 @@ static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
 
 #if defined(USE_OPENCL)
 float Network::benchmark_time(const int centiseconds) {
-    const auto cpus = cfg_num_threads;
+//    const auto cpus = cfg_num_threads;
 
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
@@ -86,23 +86,25 @@ float Network::benchmark_time(const int centiseconds) {
     // Isn't enough to guarantee correctness but better than nothing,
     // plus for large nets self-check takes a while (1~3 eval per second)
     Netresult result;
-    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, true, true);
+    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, false, false);
 
     const Time start;
-    for (auto i = size_t{0}; i < cpus; i++) {
+    for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, start, centiseconds, state]() {
             while (true) {
                 runcount++;
-                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
+                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
                 const Time end;
                 const auto elapsed = Time::timediff_centis(start, end);
                 if (elapsed >= centiseconds) {
                     break;
                 }
             }
+            drain_evals();
         });
     }
     tg.wait_all();
+    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_centis(start, end);
@@ -111,22 +113,23 @@ float Network::benchmark_time(const int centiseconds) {
 #endif
 
 void Network::benchmark(const GameState* state, const int iterations) {
-    const auto cpus = cfg_num_threads;
     const Time start;
 
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
     Netresult result;
 
-    for (auto i = size_t{0}; i < cpus; i++) {
+    for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
             }
+            drain_evals();
         });
     }
     tg.wait_all();
+    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_seconds(start, end);
