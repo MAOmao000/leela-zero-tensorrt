@@ -254,19 +254,7 @@ bool BackendTRT<net_t>::build(
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
-#ifdef _WIN32
-            HANDLE hFile = Utils::lockFile(planCacheFile);
-            if (!hFile) {
-                myprintf_error("Could not lock the plan cache file.\n");
-                exit(EXIT_FAILURE);
-            }
-#else
-            int fd = Utils::lockFile(planCacheFile);
-            if (fd == -1) {
-                myprintf_error("Could not lock the plan cache file.\n");
-                exit(EXIT_FAILURE);
-            }
-#endif
+            lockFile(planCacheFile);
             try {
                 plan = readFileBinary(planCacheFile);
             } catch (std::exception const& e) {
@@ -297,11 +285,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
-#ifdef _WIN32
-                    Utils::unlockFile(hFile);
-#else
-                    Utils::unlockFile(fd);
-#endif
+                    unlockFile();
                     return false;
                 }
                 plan.insert(
@@ -312,11 +296,7 @@ bool BackendTRT<net_t>::build(
                 if (m_model_hash.size() != 64) {
                     tuneMutex.unlock();
                     std::cerr << "Unexpected model hash size" << std::endl;
-#ifdef _WIN32
-                    Utils::unlockFile(hFile);
-#else
-                    Utils::unlockFile(fd);
-#endif
+                    unlockFile();
                     return false;
                 }
                 plan.insert(
@@ -338,11 +318,7 @@ bool BackendTRT<net_t>::build(
             } else {
                 std::cout << "Using existing plan cache at " + planCacheFile << std::endl;
             }
-#ifdef _WIN32
-            Utils::unlockFile(hFile);
-#else
-            Utils::unlockFile(fd);
-#endif
+            unlockFile();
         } else {
             auto timingCacheFile = strprintf(
                 "%s%strt-%d_gpu-%s_tune-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
@@ -361,19 +337,7 @@ bool BackendTRT<net_t>::build(
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
-#ifdef _WIN32
-            HANDLE hFile = Utils::lockFile(timingCacheFile);
-            if (!hFile) {
-                myprintf_error("Could not lock the timing cache file.\n");
-                exit(EXIT_FAILURE);
-            }
-#else
-            int fd = Utils::lockFile(timingCacheFile);
-            if (fd == -1) {
-                myprintf_error("Could not lock the timing cache file.\n");
-                exit(EXIT_FAILURE);
-            }
-#endif
+            lockFile(timingCacheFile);
             std::string timingCacheBlob;
             try {
                 timingCacheBlob = readFileBinary(timingCacheFile);
@@ -400,11 +364,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
-#ifdef _WIN32
-                    Utils::unlockFile(hFile);
-#else
-                    Utils::unlockFile(fd);
-#endif
+                    unlockFile();
                     return false;
                 }
                 auto serializedTimingCache = std::unique_ptr<IHostMemory>(
@@ -419,11 +379,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
-#ifdef _WIN32
-                    Utils::unlockFile(hFile);
-#else
-                    Utils::unlockFile(fd);
-#endif
+                    unlockFile();
                     return false;
                 }
             }
@@ -431,11 +387,7 @@ bool BackendTRT<net_t>::build(
                 plan.end(),
                 static_cast<char*>(planBuffer->data()),
                 static_cast<char*>(planBuffer->data()) + planBuffer->size());
-#ifdef _WIN32
-            Utils::unlockFile(hFile);
-#else
-            Utils::unlockFile(fd);
-#endif
+            unlockFile();
         }
         tuneMutex.unlock();
     }

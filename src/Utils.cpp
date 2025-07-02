@@ -227,6 +227,7 @@ std::string Utils::leelaz_file(const std::string& file) {
     return dir.string();
 }
 
+#if defined(USE_CPU_ONLY) || defined(USE_OPENCL)
 std::vector<float> Utils::softmax(const std::vector<float>& input,
                                   const float temperature) {
 
@@ -248,67 +249,4 @@ std::vector<float> Utils::softmax(const std::vector<float>& input,
 
     return output;
 }
-
-#ifdef _WIN32
-HANDLE Utils::lockFile(const std::string& file) {
-    HANDLE hFile = CreateFile(
-        file.c_str(),
-        GENERIC_READ | GENERIC_WRITE,
-        0,
-        NULL,
-        OPEN_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        return nullptr;
-    }
-    OVERLAPPED overlapped = {0};
-    auto locked = LockFileEx(
-        hFile,
-        LOCKFILE_EXCLUSIVE_LOCK,
-        0, // reserved
-        0, // number of bytes to lock
-        0, // offset high
-        &overlapped);
-    if (!locked) {
-        CloseHandle(hFile);
-        return nullptr;
-    }
-    return hFile;
-#else
-int Utils::lockFile(const std::string& file) {
-    int fd = open(file.c_str(), O_RDWR | O_CREAT, 0664);
-    if (fd == -1) {
-        return -1;
-    }
-    struct flock fl;
-    fl.l_type = F_WRLCK;
-    fl.l_whence = SEEK_SET;
-    fl.l_start = 0;
-    fl.l_len = 0; // 0 means to lock the whole file
-    if (fcntl(fd, F_SETLKW, &fl) == -1) {
-        close(fd);
-        return -1;
-    }
-    return fd;
 #endif
-}
-
-#ifdef _WIN32
-void Utils::unlockFile(HANDLE hFile) {
-    OVERLAPPED overlapped = {0};
-    UnlockFileEx(hFile, 0, 0, 0, &overlapped);
-    CloseHandle(hFile);
-#else
-void Utils::unlockFile(int fd) {
-    struct flock fl;
-    fl.l_type = F_UNLCK;
-    fl.l_whence = SEEK_SET;
-    fl.l_start = 0;
-    fl.l_len = 0;
-    if (fcntl(fd, F_SETLK, &fl) == -1) {
-        myprintf_error("Utils::unlockFile fcntl error\n");
-    }
-    close(fd);
-#endif
-}
