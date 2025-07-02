@@ -100,7 +100,7 @@ static void calculate_thread_count_gpu(
         auto num_threads = vm["threads"].as<unsigned int>();
         if (num_threads > cfg_max_threads) {
             myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
-            num_threads = cfg_max_threads;
+            num_threads = static_cast<unsigned int>(cfg_max_threads);
         }
         cfg_num_threads = num_threads;
 
@@ -139,8 +139,9 @@ static void calculate_thread_count_gpu(
 
     if (cfg_num_threads < cfg_batch_size) {
         printf(
-            "Number of threads = %d must be no smaller than batch size = %d\n",
-            cfg_num_threads, cfg_batch_size);
+            "Number of threads = %zu must be no smaller than batch size = %zu\n",
+            static_cast<size_t>(cfg_num_threads),
+            static_cast<size_t>(cfg_batch_size));
         exit(EXIT_FAILURE);
     }
 }
