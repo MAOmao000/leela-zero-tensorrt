@@ -62,7 +62,6 @@
 #include "Random.h"
 #include "ThreadPool.h"
 #include "Timing.h"
-#include "Utils.h"
 #include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
@@ -495,7 +494,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
     return std::move(pipe);
 }
 
-#ifdef USE_HALF
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 void Network::select_precision(const int channels) {
     if (cfg_precision == precision_t::AUTO) {
 #if defined(USE_TENSOR_RT)
@@ -696,15 +695,15 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
 #if defined(USE_CPU_ONLY)
     myprintf("Initializing CPU-only evaluation.\n");
     m_forward = init_net(channels, std::make_unique<CPUPipe>());
-#elif defined(USE_OPENCL) && defined(USE_OPENCL_SELFCHECK)
+#else
+#if defined(USE_OPENCL) && defined(USE_OPENCL_SELFCHECK)
     // initialize CPU reference first, so that we can self-check
     // when doing fp16 vs. fp32 detections
     m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
 #endif
-#ifdef USE_HALF
     // HALF support is enabled, and we are using the GPU.
     // Select the precision to use at runtime.
-    select_precision(channels);
+    select_precision(static_cast<int>(channels));
 #endif
 
     // Need to estimate size before clearing up the pipe.

@@ -138,7 +138,7 @@ private:
     bool probe_cache(const GameState* state, Network::Netresult& result);
     std::unique_ptr<ForwardPipe>&& init_net(
         int channels, std::unique_ptr<ForwardPipe>&& pipe);
-#ifdef USE_HALF
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
     void select_precision(int channels);
 #endif
     std::unique_ptr<ForwardPipe> m_forward;

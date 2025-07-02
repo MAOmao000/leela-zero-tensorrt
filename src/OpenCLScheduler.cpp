@@ -489,8 +489,6 @@ void OpenCLScheduler<net_t>::resume() {
 }
 
 template class OpenCLScheduler<float>;
-#ifdef USE_HALF
 template class OpenCLScheduler<half_float::half>;
-#endif
 
 #endif

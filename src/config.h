@@ -76,12 +76,8 @@ enum class NetworkType {
 static constexpr auto PROGRAM_NAME = "Leela Zero";
 static constexpr auto PROGRAM_VERSION_MAJOR = "2";
 static constexpr auto PROGRAM_VERSION_MINOR = "0";
-static constexpr auto PROGRAM_VERSION_PATCH = "0";
+static constexpr auto PROGRAM_VERSION_PATCH = "1";
 
-/*
- * OpenBLAS limitation: the default configuration on some Linuxes
- * is limited to 64 cores.
- */
 static constexpr auto MAX_CPUS = 256;
 
 #if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
@@ -93,14 +89,12 @@ static constexpr auto MAX_CPUS = 256;
  * accuracy on the calculation, but generally it is worth using half precision
  * if it is at least 5% faster.
  */
-#define USE_HALF
 #include "half/half.hpp"
-#endif
-
 #if defined(USE_OPENCL) && defined(USE_OPENCL_SELFCHECK)
 // If OpenCL are fully usable, then check the OpenCL against CPU
 // implementation with some probability.
 static constexpr auto SELFCHECK_PROBABILITY = 2000;
+#endif
 #endif
 
 #if (_MSC_VER >= 1900) /* VC14+ Disable all deprecation warnings */

@@ -63,7 +63,6 @@ float getTunerMaxError<float>() {
     return 1e-4f;
 }
 
-#ifdef USE_HALF
 template <>
 std::string getTunerKernel<half_float::half>() {
     return std::string("XgemmBatchedHalf");
@@ -73,7 +72,6 @@ template <>
 float getTunerMaxError<half_float::half>() {
     return 1e-1f;
 }
-#endif
 
 using namespace Utils;
 
@@ -671,19 +669,7 @@ template <typename net_t>
 std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
                                             const int k, const int batch_size) {
     auto tuner_file = leelaz_file(TUNER_FILE_LOCAL);
-#ifdef _WIN32
-    HANDLE hFile = Utils::lockFile(tuner_file);
-    if (!hFile) {
-        myprintf_error("Could not lock the tuning file.\n");
-        exit(EXIT_FAILURE);
-    }
-#else
-    int fd = Utils::lockFile(tuner_file);
-    if (fd == -1) {
-        myprintf_error("Could not lock the tuning file.\n");
-        exit(EXIT_FAILURE);
-    }
-#endif
+    lockFile(tuner_file);
     auto file = std::ifstream{tuner_file};
 
     auto try_prior_tuning = file.good();
@@ -706,22 +692,14 @@ std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
             auto tuners = sgemm_tuners_from_line(line, m, n, k, batch_size);
             if (tuners.size() != 0) {
                 myprintf("Loaded existing SGEMM tuning.\n");
-#ifdef _WIN32
-                Utils::unlockFile(hFile);
-#else
-                Utils::unlockFile(fd);
-#endif
+                unlockFile();
                 return tuners;
             }
         }
     }
     auto tuners = tune_sgemm(m, n, k, batch_size);
     store_sgemm_tuners(m, n, k, batch_size, tuners);
-#ifdef _WIN32
-    Utils::unlockFile(hFile);
-#else
-    Utils::unlockFile(fd);
-#endif
+    unlockFile();
     return tuners;
 }
 
@@ -734,8 +712,6 @@ void Tuner<half_float::half>::enable_tensorcore() {
 }
 
 template class Tuner<float>;
-#ifdef USE_HALF
 template class Tuner<half_float::half>;
-#endif
 
 #endif
