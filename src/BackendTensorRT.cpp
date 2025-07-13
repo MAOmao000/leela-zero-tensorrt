@@ -35,8 +35,6 @@
 using namespace Utils;
 using namespace nvinfer1;
 
-#include "NvInferRuntime.h"
-
 template <typename net_t>
 BackendTRT<net_t>::BackendTRT(
     const int gpu,
