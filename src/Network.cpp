@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -71,9 +72,8 @@ using namespace Utils;
 static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
     symmetry_nn_idx_table;
 
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 float Network::benchmark_time(const int centiseconds) {
-//    const auto cpus = cfg_num_threads;
 
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
@@ -496,91 +496,76 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 
 #if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
 void Network::select_precision(const int channels) {
-    if (cfg_precision == precision_t::AUTO) {
 #if defined(USE_TENSOR_RT)
-        myprintf("Initializing TensorRT (autodetecting precision).\n");
-        m_forward = init_net(channels, std::make_unique<GPUScheduler<float>>());
-        myprintf("Using TensorRT single precision.\n");
+    using FloatScheduler = GPUScheduler<float>;
+    using HalfScheduler = GPUScheduler<half_float::half>;
+    const char backend[] = "TensorRT";
 #else
+    using FloatScheduler = OpenCLScheduler<float>;
+    using HalfScheduler = OpenCLScheduler<half_float::half>;
+    const char backend[] = "OpenCL";
+#endif
+    if (cfg_precision == precision_t::AUTO) {
         auto score_fp16 = float{-1.0};
         auto score_fp32 = float{-1.0};
-
-        myprintf("Initializing OpenCL (autodetecting precision).\n");
-
+        myprintf("Initializing %s (autodetecting precision).\n", backend);
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
-        auto fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
+        auto fp16_net = std::make_unique<HalfScheduler>();
         if (!fp16_net->needs_autodetect()) {
             try {
-                myprintf("OpenCL: using fp16/half or tensor core compute support.\n");
+                myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
                 m_forward = init_net(channels, std::move(fp16_net));
-                benchmark_time(1); // a sanity check run
+                score_fp16 = benchmark_time(100);
             } catch (...) {
-                myprintf("OpenCL: fp16/half or tensor core failed "
-                         "despite driver claiming support.\n");
+                myprintf("%s: fp16/half or tensor core failed "
+                         "despite driver claiming support.\n", backend);
                 myprintf("Falling back to single precision\n");
                 m_forward.reset();
                 m_forward = init_net(
-                    channels, std::make_unique<OpenCLScheduler<float>>());
+                    channels, std::make_unique<FloatScheduler>());
+                return;
             }
-            return;
-        }
-        // Start by setting up fp32.
-        try {
-            m_forward.reset();
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-            score_fp32 = benchmark_time(100);
-        } catch (...) {
-            // empty - if exception thrown just throw away fp32 net
-        }
-        // Now benchmark fp16.
-        try {
-            m_forward.reset();
-            m_forward = init_net(channels, std::move(fp16_net));
-            score_fp16 = benchmark_time(100);
-        } catch (...) {
-            // empty - if exception thrown just throw away fp16 net
-        }
-        if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
-            myprintf("Both single precision and half precision failed to run.\n");
-            throw std::runtime_error("Failed to initialize net.");
-        } else if (score_fp16 < 0.0f) {
-            myprintf("Using OpenCL single precision (half precision failed to run).\n");
-            m_forward.reset();
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        } else if (score_fp32 < 0.0f) {
-            myprintf("Using OpenCL half precision (single precision failed to run).\n");
-        } else if (score_fp32 * 1.05f > score_fp16) {
-            myprintf("Using OpenCL single precision (less than 5%% slower than half).\n");
-            m_forward.reset();
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+            // Start by setting up fp32.
+            try {
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<FloatScheduler>());
+                score_fp32 = benchmark_time(100);
+            } catch (...) {
+                // empty - if exception thrown just throw away fp32 net
+            }
+            if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
+                myprintf("Both single precision and half precision failed to run.\n");
+                throw std::runtime_error("Failed to initialize net.");
+            } else if (score_fp16 < 0.0f) {
+                myprintf("Using %s single precision (half precision failed to run).\n", backend);
+            } else if (score_fp32 < 0.0f) {
+                myprintf("Using %s half precision (single precision failed to run).\n", backend);
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<HalfScheduler>());
+            } else if (score_fp32 * 1.05f > score_fp16) {
+                myprintf("Using %s single precision (less than 5%% slower than half).\n", backend);
+            } else {
+                myprintf("Using %s half precision (at least 5%% faster than single).\n", backend);
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<HalfScheduler>());
+            }
         } else {
-            myprintf("Using OpenCL half precision (at least 5%% faster than single).\n");
+            myprintf("Initializing %s (single precision).\n", backend);
+            m_forward =
+                init_net(channels, std::make_unique<FloatScheduler>());
         }
-#endif
     } else if (cfg_precision == precision_t::SINGLE) {
-#if defined(USE_TENSOR_RT)
-        myprintf("Initializing TensorRT (single precision).\n");
+        myprintf("Initializing %s (single precision).\n", backend);
         m_forward =
-            init_net(channels, std::make_unique<GPUScheduler<float>>());
-#else
-        myprintf("Initializing OpenCL (single precision).\n");
-        m_forward =
-            init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#endif
+            init_net(channels, std::make_unique<FloatScheduler>());
     } else if (cfg_precision == precision_t::HALF) {
-#if defined(USE_TENSOR_RT)
-        myprintf("Initializing TensorRT (half precision).\n");
+        myprintf("Initializing %s (half precision).\n", backend);
         m_forward = init_net(
-            channels, std::make_unique<GPUScheduler<half_float::half>>());
-#else
-        myprintf("Initializing OpenCL (half precision).\n");
-        m_forward = init_net(
-            channels, std::make_unique<OpenCLScheduler<half_float::half>>());
-#endif
+            channels, std::make_unique<HalfScheduler>());
     }
 }
 #endif

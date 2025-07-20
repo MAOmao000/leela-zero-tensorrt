@@ -86,7 +86,7 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
     float benchmark_time(int centiseconds);
 #endif
     void benchmark(const GameState* state, int iterations = 1600);
