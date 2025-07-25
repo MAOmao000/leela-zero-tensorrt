@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -74,6 +75,7 @@ public:
     virtual void initialize(const int channels,
                             const NetworkType net_type,
                             const std::string &model_hash = "") = 0;
+
     virtual bool needs_autodetect() {
         return false;
     };

@@ -498,7 +498,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 void Network::select_precision(const int channels) {
 #if defined(USE_TENSOR_RT)
     using FloatScheduler = GPUScheduler<float>;
-    using HalfScheduler = GPUScheduler<half_float::half>;
+    using HalfScheduler = GPUScheduler<__half>;
     const char backend[] = "TensorRT";
 #else
     using FloatScheduler = OpenCLScheduler<float>;
