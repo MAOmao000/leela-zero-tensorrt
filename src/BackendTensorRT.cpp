@@ -43,8 +43,8 @@ public:
         return m_f;
     }
 
-    operator std::vector<half_float::half>() {
-        auto ret = std::vector<half_float::half>(m_f.size());
+    operator std::vector<__half>() {
+        auto ret = std::vector<__half>(m_f.size());
         std::copy(cbegin(m_f), cend(m_f), begin(ret));
         return ret;
     }
@@ -106,8 +106,14 @@ BackendTRT<net_t>::BackendTRT(
 
     if (best_device.major >= 7) {
         m_tensorcore = true;
-    } else if (best_device.major >= 6) {
-        m_fp16_compute = true;
+    } else if (best_device.major == 6) {
+        if (best_device.minor != 1) {
+            m_fp16_compute = true;
+        }
+    } else if (best_device.major == 5) {
+        if (best_device.minor == 3) {
+            m_fp16_compute = true;
+        }
     }
 
     cudaSetDevice(best_device_id);
@@ -152,6 +158,7 @@ bool BackendTRT<net_t>::build(
         std::cerr << "TensorRT backend: failed to create builder config" << std::endl;
         return false;
     }
+    config->setFlag(BuilderFlag::kTF32);
 
     for (auto i = 0; i < num_worker_threads; i++) {
         auto profile = builder->createOptimizationProfile();
@@ -265,7 +272,9 @@ bool BackendTRT<net_t>::build(
                 num_worker_threads,
                 precision.c_str()
             );
+#ifdef NDEBUG
             lockFile(planCacheFile);
+#endif
             try {
                 plan = readFileBinary(planCacheFile);
             } catch (std::exception const& e) {
@@ -296,7 +305,9 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+#ifdef NDEBUG
                     unlockFile();
+#endif
                     return false;
                 }
                 plan.insert(
@@ -307,7 +318,9 @@ bool BackendTRT<net_t>::build(
                 if (m_model_hash.size() != 64) {
                     tuneMutex.unlock();
                     std::cerr << "Unexpected model hash size" << std::endl;
+#ifdef NDEBUG
                     unlockFile();
+#endif
                     return false;
                 }
                 plan.insert(
@@ -329,7 +342,9 @@ bool BackendTRT<net_t>::build(
             } else {
                 std::cout << "Using existing plan cache at " + planCacheFile << std::endl;
             }
+#ifdef NDEBUG
             unlockFile();
+#endif
         } else {
             auto timingCacheFile = strprintf(
                 "%s%strt-%d_gpu-%s_tune-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_%s",
@@ -347,7 +362,9 @@ bool BackendTRT<net_t>::build(
                 num_worker_threads,
                 precision.c_str()
             );
+#ifdef NDEBUG
             lockFile(timingCacheFile);
+#endif
             std::string timingCacheBlob;
             try {
                 timingCacheBlob = readFileBinary(timingCacheFile);
@@ -374,7 +391,9 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+#ifdef NDEBUG
                     unlockFile();
+#endif
                     return false;
                 }
                 auto serializedTimingCache = std::unique_ptr<IHostMemory>(
@@ -389,7 +408,9 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+#ifdef NDEBUG
                     unlockFile();
+#endif
                     return false;
                 }
             }
@@ -397,7 +418,9 @@ bool BackendTRT<net_t>::build(
                 plan.end(),
                 static_cast<char*>(planBuffer->data()),
                 static_cast<char*>(planBuffer->data()) + planBuffer->size());
+#ifdef NDEBUG
             unlockFile();
+#endif
         }
         tuneMutex.unlock();
     }
@@ -426,8 +449,6 @@ bool BackendTRT<net_t>::build(
             size_t size_byte;
             if (name_str == "BatchSize") {
                 size_byte = sizeof(int32_t);
-            } else if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
-                size_byte = sizeof(float);
             } else {
                 size_byte = sizeof(net_t);
             }
@@ -467,6 +488,9 @@ template <typename net_t>
 bool BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
     std::string& tune_desc) {
+
+    auto data_type
+        = (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF;
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
@@ -730,20 +754,11 @@ bool BackendTRT<net_t>::constructNetwork(
                 int32_t const variable_batch = static_cast<int32_t>(
                     actValueLayer->getOutput(0)->getDimensions().d[0]);
                 inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
-                IConstantLayer* filter1Const;
-                if (typeid(net_t) == typeid(float)) {
-                    filter1Const =
-                        network->addConstant(
-                            Dims{2, {NUM_INTERSECTIONS, layer.channels}},
-                            {DataType::kFLOAT, ip1_val_weight[0], layer.weights_size[2]}
-                        );
-                } else {
-                    filter1Const =
-                        network->addConstant(
-                            Dims{2, {NUM_INTERSECTIONS, layer.channels}},
-                            {DataType::kHALF, ip1_val_weight[0], layer.weights_size[2]}
-                        );
-                }
+                auto filter1Const =
+                    network->addConstant(
+                        Dims{2, {NUM_INTERSECTIONS, layer.channels}},
+                        {data_type, ip1_val_weight[0], layer.weights_size[2]}
+                    );
                 // value_fc_hidden = tf.layers.dense(value_conv, units=256)
                 auto val1MatMulLayer = network->addMatrixMultiply(
                     *inputReshape->getOutput(0),
@@ -751,20 +766,11 @@ bool BackendTRT<net_t>::constructNetwork(
                     *filter1Const->getOutput(0),
                     MatrixOperation::kNONE);
                 // value_fc_hidden = tf.layers.dense(value_conv, units=256)
-                IConstantLayer* bias1Const;
-                if (typeid(net_t) == typeid(float)) {
-                    bias1Const =
-                        network->addConstant(
-                            Dims{2, {1, layer.channels}},
-                            {DataType::kFLOAT, ip1_val_bias[0], layer.weights_size[3]}
-                        );
-                } else {
-                    bias1Const =
-                        network->addConstant(
-                            Dims{2, {1, layer.channels}},
-                            {DataType::kHALF, ip1_val_bias[0], layer.weights_size[3]}
-                        );
-                }
+                auto bias1Const =
+                    network->addConstant(
+                        Dims{2, {1, layer.channels}},
+                        {data_type, ip1_val_bias[0], layer.weights_size[3]}
+                    );
                 auto val1BiasLayer = network->addElementWise(
                     *val1MatMulLayer->getOutput(0),
                     *bias1Const->getOutput(0),
@@ -777,40 +783,22 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.name + ".ip1act",
                     ActivationType::kRELU);
                 // value_fc_hidden = tf.layers.dense(value_conv, units=1)
-                IConstantLayer* filter2Const;
-                if (typeid(net_t) == typeid(float)) {
-                    filter2Const =
-                        network->addConstant(
-                            Dims{2, {layer.channels, 1}},
-                            {DataType::kFLOAT, ip2_val_weight[0], layer.weights_size[4]}
-                        );
-                } else {
-                    filter2Const =
-                        network->addConstant(
-                            Dims{2, {layer.channels, 1}},
-                            {DataType::kHALF, ip2_val_weight[0], layer.weights_size[4]}
-                        );
-                }
+                auto filter2Const =
+                    network->addConstant(
+                        Dims{2, {layer.channels, 1}},
+                        {data_type, ip2_val_weight[0], layer.weights_size[4]}
+                    );
                 auto val2MatMulLayer = network->addMatrixMultiply(
                     *ip1ActValueLayer->getOutput(0),
                     MatrixOperation::kNONE,
                     *filter2Const->getOutput(0),
                     MatrixOperation::kNONE);
                 // value_fc_hidden = tf.layers.dense(value_conv, units=1)
-                IConstantLayer* bias2Const;
-                if (typeid(net_t) == typeid(float)) {
-                    bias2Const =
-                        network->addConstant(
-                            Dims{2, {1, 1}},
-                            {DataType::kFLOAT, ip2_val_bias[0], layer.weights_size[5]}
-                        );
-                } else {
-                    bias2Const =
-                        network->addConstant(
-                            Dims{2, {1, 1}},
-                            {DataType::kHALF, ip2_val_bias[0], layer.weights_size[5]}
-                        );
-                }
+                auto bias2Const =
+                    network->addConstant(
+                        Dims{2, {1, 1}},
+                        {data_type, ip2_val_bias[0], layer.weights_size[5]}
+                    );
                 auto val2BiasLayer = network->addElementWise(
                     *val2MatMulLayer->getOutput(0),
                     *bias2Const->getOutput(0),
@@ -856,20 +844,11 @@ bool BackendTRT<net_t>::constructNetwork(
                     actPolicyLayer->getOutput(0)->getDimensions().d[0]);
                 inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
                 // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
-                IConstantLayer* filterConst;
-                if (typeid(net_t) == typeid(float)) {
-                    filterConst =
-                        network->addConstant(
-                            Dims{2, {POTENTIAL_MOVES, layer.outputs * NUM_INTERSECTIONS}},
-                            {DataType::kFLOAT, ip_pol_weight[0], layer.weights_size[2]}
-                        );
-                } else {
-                    filterConst =
-                        network->addConstant(
-                            Dims{2, {POTENTIAL_MOVES, layer.outputs * NUM_INTERSECTIONS}},
-                            {DataType::kHALF, ip_pol_weight[0], layer.weights_size[2]}
-                        );
-                }
+                auto filterConst =
+                    network->addConstant(
+                        Dims{2, {POTENTIAL_MOVES, layer.outputs * NUM_INTERSECTIONS}},
+                        {data_type, ip_pol_weight[0], layer.weights_size[2]}
+                    );
                 auto polMatMulLayer = network->addMatrixMultiply(
                     *inputReshape->getOutput(0),
                     MatrixOperation::kNONE,
@@ -877,20 +856,11 @@ bool BackendTRT<net_t>::constructNetwork(
                     MatrixOperation::kTRANSPOSE
                     );
                 // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
-                IConstantLayer* biasConst;
-                if (typeid(net_t) == typeid(float)) {
-                    biasConst =
-                        network->addConstant(
-                            Dims{2, {1, POTENTIAL_MOVES}},
-                            {DataType::kFLOAT, ip_pol_bias[0], layer.weights_size[3]}
-                        );
-                } else {
-                    biasConst =
-                        network->addConstant(
-                            Dims{2, {1, POTENTIAL_MOVES}},
-                            {DataType::kHALF, ip_pol_bias[0], layer.weights_size[3]}
-                        );
-                }
+                auto biasConst =
+                    network->addConstant(
+                        Dims{2, {1, POTENTIAL_MOVES}},
+                        {data_type, ip_pol_bias[0], layer.weights_size[3]}
+                    );
                 auto polBiasLayer = network->addElementWise(
                     *polMatMulLayer->getOutput(0),
                     *biasConst->getOutput(0),
@@ -930,17 +900,10 @@ ITensor* BackendTRT<net_t>::initInputs(
     ITensor* inputFeature;
 
     std::string_view name_str{inputName};
-    if (typeid(net_t) == typeid(float)) {
-        inputFeature = network->addInput(
-            inputName,
-            DataType::kFLOAT,
-            {4, {-1, channels, rows, cols}});
-    } else {
-        inputFeature = network->addInput(
-            inputName,
-            DataType::kHALF,
-            {4, {-1, channels, rows, cols}});
-    }
+    inputFeature = network->addInput(
+        inputName,
+        (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF,
+        {4, {-1, channels, rows, cols}});
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
     return inputFeature;
@@ -968,40 +931,21 @@ ILayer* BackendTRT<net_t>::buildConvLayer(
 
     // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
     // matmul is mathmatically equivalent to a 2D convolution of 1x1 features and 1x1 kernels.
-    IConvolutionLayer *convLayer;
-    if (typeid(net_t) == typeid(float)) {
-        convLayer = network->addConvolutionNd(
-            *input,
-            outputs,
-            {2, {filter_size, filter_size}},
-            {
-                DataType::kFLOAT,
-                weights,
-                weights_size
-            },
-            {
-                DataType::kFLOAT,
-                biases,
-                biases_size
-            }
-        );
-    } else {
-        convLayer = network->addConvolutionNd(
-            *input,
-            outputs,
-            {2, {filter_size, filter_size}},
-            {
-                DataType::kHALF,
-                weights,
-                weights_size
-            },
-            {
-                DataType::kHALF,
-                biases,
-                biases_size
-            }
-        );
-    }
+    auto convLayer = network->addConvolutionNd(
+        *input,
+        outputs,
+        {2, {filter_size, filter_size}},
+        {
+            (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF,
+            weights,
+            weights_size
+        },
+        {
+            (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF,
+            biases,
+            biases_size
+        }
+    );
     if (filter_size == 1) {
         return convLayer;
     }
@@ -1363,6 +1307,6 @@ void BackendTRT<net_t>::forward(
 }
 
 template class BackendTRT<float>;
-template class BackendTRT<half_float::half>;
+template class BackendTRT<__half>;
 
 #endif
