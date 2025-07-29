@@ -753,45 +753,6 @@ bool Network::probe_cache(const GameState* const state,
     return false;
 }
 
-void Network::ladder_update(
-    const GameState* state, Network::Netresult& result) {
-
-    int ladder_map[NUM_INTERSECTIONS] = {};
-    std::array<float, NUM_INTERSECTIONS> policy = result.policy;
-    std::stable_sort(rbegin(policy), rend(policy));
-    auto ladder_check_nodes = cfg_ladder_check_nodes;
-    for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
-        if (policy[i] < cfg_ladder_min_policy) {
-            ladder_check_nodes = i;
-            break;
-        }
-    }
-    LadderDetection(
-        state,
-        ladder_map,
-        result.policy,
-        policy[ladder_check_nodes - 1],
-        ladder_check_nodes
-    );
-    for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
-            if (cfg_ladder_penalty_winrate > 0.0f) {
-                result.winrate -=
-                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
-                result.winrate = std::max(0.001f, result.winrate);
-            }
-            result.policy[i] = 0.0f;
-        } else if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_offense) {
-            if (cfg_ladder_penalty_winrate > 0.0f) {
-                result.winrate -=
-                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
-                result.winrate = std::max(0.001f, result.winrate);
-            }
-            result.policy[i] = 0.0f;
-        }
-    }
-}
-
 bool Network::get_output(
     const GameState* state, const Ensemble ensemble,
     Network::Netresult& result, const bool full_batch,
@@ -866,7 +827,7 @@ bool Network::get_output(
     }
 
     if (cfg_ladder_defense > 0 || cfg_ladder_offense > 0) {
-        ladder_update(state, result);
+        LadderDetection(state, result);
     }
 
     if (write_cache) {
