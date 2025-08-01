@@ -390,7 +390,7 @@ void GTP::setup_default_parameters() {
 
     cfg_ladder_defense = 11;
     cfg_ladder_offense = 8;
-    cfg_defense_stones = 0;
+    cfg_defense_stones = 1;
     cfg_offense_stones = 4;
     cfg_ladder_check_nodes = 10;
     cfg_ladder_penalty_winrate = 0.9f;
