@@ -58,6 +58,14 @@ BackendTRT<net_t>::BackendTRT(
     const int gpu,
     const bool silent) {
 
+    // Certain minor versions of TensorRT uses a global logger, which is bad.
+    // Since TensorRT maintains ABI compatibility between minor versions, a dynamic library mismatch
+    // does not necessarily generate a dynamic link error, therefore, an extra check is required.
+    if (getInferLibVersion() / 100 != NV_TENSORRT_VERSION / 100) {
+        myprintf("TensorRT backend: detected incompatible version of TensorRT library.\n");
+        exit(EXIT_FAILURE);
+    }
+
     auto best_bandwidth = 0.0;
     auto found_device = false;
     auto nDevices = 0;
