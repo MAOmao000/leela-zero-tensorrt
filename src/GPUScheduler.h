@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -49,6 +49,20 @@ class GPUScheduler : public ForwardPipe {
         std::mutex mutex;
         std::condition_variable cv;
         const bool full_batch;
+#if defined(USE_TENSOR_FP16)
+        const std::vector<__half>& in;
+        std::vector<__half>& out_p;
+        std::vector<__half>& out_v;
+        ForwardQueueEntry(
+            const std::vector<__half>& input,
+            std::vector<__half>& output_pol,
+            std::vector<__half>& output_val,
+            const bool full)
+                : full_batch(full),
+                in(input),
+                out_p(output_pol),
+                out_v(output_val) {}
+#else
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
@@ -61,54 +75,64 @@ class GPUScheduler : public ForwardPipe {
                 in(input),
                 out_p(output_pol),
                 out_v(output_val) {}
+#endif
     };
 
 public:
     GPUScheduler();
     ~GPUScheduler() override;
 
-    virtual void initialize(
+    void initialize(
         const int channels,
         const NetworkType net_type,
         const std::string &model_hash = nullptr
     ) override;
-    bool needs_autodetect() override;
     void push_weights(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights
     ) override;
+#if defined(USE_TENSOR_FP16)
+    bool forward(
+        const std::vector<__half>& input,
+        std::vector<__half>& output_pol,
+        std::vector<__half>& output_val,
+        const bool full_batch
+    ) override;
+#else
+    bool needs_autodetect() override;
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
         const bool full_batch
     ) override;
+#endif
 
 private:
-    virtual void push_input_convolution(
+    void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_residual(
+    void push_residual(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_residual_se(
+    void push_residual_se(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_convolve(
+    void push_convolve(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,

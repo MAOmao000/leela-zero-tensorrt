@@ -86,7 +86,15 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     }
 
     // DCNN returns winrate as side to move
+#if defined(USE_TENSOR_FP16)
+    const auto stm_eval = static_cast<float>(raw_netlist.winrate);
+    std::array<float, NUM_INTERSECTIONS> raw_policy;
+    float raw_policy_pass;
+    std::copy(raw_netlist.policy.begin(), raw_netlist.policy.end(), raw_policy.begin());
+    raw_policy_pass = static_cast<float>(raw_netlist.policy_pass);
+#else
     const auto stm_eval = raw_netlist.winrate;
+#endif
     const auto to_move = state.board.get_to_move();
     // our search functions evaluate from black's point of view
     if (to_move == FastBoard::WHITE) {
@@ -103,10 +111,17 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
+#if defined(USE_TENSOR_FP16)
+        if (state.is_move_legal(to_move, vertex) && raw_policy[i] > 0.0f) {
+            nodelist.emplace_back(raw_policy[i], vertex);
+            legal_sum += raw_policy[i];
+        }
+#else
         if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > 0.0f) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
+#endif
     }
 
     // Always try passes if we're not trying to be clever.
@@ -128,8 +143,13 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     }
 
     if (allow_pass) {
+#if defined(USE_TENSOR_FP16)
+        nodelist.emplace_back(raw_policy_pass, FastBoard::PASS);
+        legal_sum += raw_policy_pass;
+#else
         nodelist.emplace_back(raw_netlist.policy_pass, FastBoard::PASS);
         legal_sum += raw_netlist.policy_pass;
+#endif
     }
 
     if (legal_sum > std::numeric_limits<float>::min()) {

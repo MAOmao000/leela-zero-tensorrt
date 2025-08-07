@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -81,7 +82,7 @@ static void calculate_thread_count_cpu(
 }
 #endif
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
 static void calculate_thread_count_gpu(
     boost::program_options::variables_map& vm) {
     auto cfg_max_threads = size_t{MAX_CPUS};
@@ -197,23 +198,24 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
         ;
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
     po::options_description gpu_desc("GPU device options");
     gpu_desc.add_options()
         ("gpu", po::value<std::vector<int>>(),
                 "ID of the GPU device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+#if !defined(USE_TENSOR_FP16)
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
+#endif
 #if defined(USE_OPENCL)
         ("gpu_batch", po::value<std::string>()->default_value("double"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
         ("tune-only", "Tune OpenCL only and then exit.")
-#endif
-#if defined(USE_TENSOR_RT)
+#else
         ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
@@ -253,7 +255,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     po::options_description visible;
     visible
         .add(gen_desc)
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
         .add(gpu_desc)
 #endif
         .add(selfplay_desc)
@@ -347,7 +349,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gtp_mode = true;
     }
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
@@ -360,6 +362,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         printf("Unexpected option for --gpu_batch, single/double.\n");
         exit(EXIT_FAILURE);
     }
+#if !defined(USE_TENSOR_FP16)
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
         if ("single" == precision) {
@@ -373,7 +376,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-
+#endif
 #if defined(USE_OPENCL)
     if (vm.count("full-tuner")) {
         if (cfg_precision == precision_t::AUTO) {
@@ -393,9 +396,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     calculate_thread_count_gpu(vm);
     myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
-#endif
-
-#if defined(USE_TENSOR_RT)
+#else
     if (vm.count("builder_opt_level")) {
         cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
     }

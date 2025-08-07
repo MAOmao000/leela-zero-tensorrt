@@ -40,7 +40,7 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
-#if defined(USE_TENSOR_RT)
+#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
 #include <iostream>
 #include "NvInfer.h"
 
@@ -143,18 +143,19 @@ extern float cfg_random_temp;
 extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
 extern std::vector<int> cfg_gpus;
 extern size_t cfg_gpu_batch;
+#if !defined(USE_TENSOR_FP16)
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
+#endif
 #if defined(USE_OPENCL)
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
-#endif
-#if defined(USE_TENSOR_RT)
+#else
 extern trtLog::Logger cfg_logger;
 extern int cfg_builder_opt_level;
 enum class trtcache_t {

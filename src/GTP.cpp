@@ -77,15 +77,16 @@ float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
 std::vector<int> cfg_gpus;
 size_t cfg_gpu_batch;
+#if !defined(USE_TENSOR_FP16)
 precision_t cfg_precision;
+#endif
 #if defined(USE_OPENCL)
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
-#endif
-#if defined(USE_TENSOR_RT)
+#else
 trtLog::Logger cfg_logger{};
 int cfg_builder_opt_level;
 bool cfg_cache_plan;
@@ -353,15 +354,16 @@ void GTP::setup_default_parameters() {
     cfg_lagbuffer_cs = 100;
     cfg_weightsfile = leelaz_file("best-network");
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if !defined(USE_CPU_ONLY)
     cfg_gpus = {};
-    cfg_precision = precision_t::AUTO;
     cfg_gpu_batch = 1;
+#if !defined(USE_TENSOR_FP16)
+    cfg_precision = precision_t::AUTO;
+#endif
 #if defined(USE_OPENCL)
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
-#endif
-#if defined(USE_TENSOR_RT)
+#else
     cfg_builder_opt_level = 2;
     cfg_cache_plan = true;
 #endif

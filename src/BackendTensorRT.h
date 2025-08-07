@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017 Henrik Forsten
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -47,7 +47,6 @@
 #define CUDA_API_PER_THREAD_DEFAULT_STREAM
 
 #include <cuda_runtime_api.h>
-#include <cuda_fp16.h>
 #include "NvInfer.h"
 
 #include "sha2.h"
@@ -266,6 +265,15 @@ public:
         const std::vector<float>& ip2_b
     );
 
+#if defined(USE_TENSOR_FP16)
+    void forward(
+        const std::vector<__half>& input,
+        std::vector<__half>& output_pol,
+        std::vector<__half>& output_val,
+        const int tid,
+        const size_t batch_size = 1
+    );
+#else
     void forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
@@ -281,11 +289,21 @@ public:
     bool has_tensor_cores() const {
         return m_tensorcore;
     }
+#endif
 
     std::vector<BackendLayer> m_layers;
     std::vector<std::unique_ptr<BackendContext>> m_context;
 
 private:
+#if defined(USE_TENSOR_FP16)
+    void forward_activations(
+        const std::vector<__half>& input,
+        std::vector<__half>& output_pol,
+        std::vector<__half>& output_val,
+        BackendContext& cudnn_context,
+        const size_t batch_size = 1
+    );
+#else
     void forward_activations(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
@@ -293,16 +311,17 @@ private:
         BackendContext& cudnn_context,
         const size_t batch_size = 1
     );
+#endif
 
     void push_weights(
         const size_t layer,
-        const std::vector<net_t>& weights,
+        const std::vector<float>& weights_float,
         const bool host_mem = false
     );
 
     void push_weights_col_major(
         const size_t layer,
-        const std::vector<net_t>& weights,
+        const std::vector<float>& weights_float,
         const int row,
         const int column,
         const int channels = 1,
@@ -363,11 +382,14 @@ private:
     std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
     TRTErrorRecorder trtErrorRecorder;
 
-    bool m_fp16_compute{false};
-    bool m_tensorcore{false};
     int m_num_worker_threads{1};
     cudaDeviceProp m_device_prop{};
     std::string m_model_hash{""};
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
+
+#if !defined(USE_TENSOR_FP16)
+    bool m_fp16_compute{false};
+    bool m_tensorcore{false};
+#endif
 };
 #endif

@@ -149,7 +149,11 @@ void Training::clear_training() {
 }
 
 TimeStep::NNPlanes Training::get_planes(const GameState* const state) {
-    const auto input_data = Network::gather_features(state, 0);
+#if defined(USE_TENSOR_FP16)
+    const auto input_data = Network::gather_features<__half>(state, 0);
+#else
+    const auto input_data = Network::gather_features<float>(state, 0);
+#endif
 
     auto planes = TimeStep::NNPlanes{};
     planes.resize(Network::INPUT_CHANNELS);
@@ -173,7 +177,7 @@ void Training::record(Network& network, GameState& state,
                             Network::IDENTITY_SYMMETRY)) {
         return;
     }
-    step.net_winrate = result.winrate;
+    step.net_winrate = static_cast<float>(result.winrate);
 
     const auto& best_node = root.get_best_root_child(step.to_move);
     step.root_uct_winrate = root.get_eval(step.to_move);

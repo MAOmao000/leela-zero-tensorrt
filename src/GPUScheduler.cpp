@@ -29,7 +29,7 @@
 */
 #include "config.h"
 
-#if defined(USE_TENSOR_RT)
+#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
 
 #include "GPUScheduler.h"
 #include "BackendTensorRT.h"
@@ -130,6 +130,7 @@ GPUScheduler<net_t>::~GPUScheduler()
     }
 }
 
+#if !defined(USE_TENSOR_FP16)
 template <typename net_t>
 bool GPUScheduler<net_t>::needs_autodetect()
 {
@@ -141,6 +142,7 @@ bool GPUScheduler<net_t>::needs_autodetect()
     }
     return false;
 }
+#endif
 
 template <typename net_t>
 void GPUScheduler<net_t>::push_input_convolution(
@@ -306,9 +308,15 @@ void GPUScheduler<net_t>::push_weights(
 
 template <typename net_t>
 bool GPUScheduler<net_t>::forward(
+#if defined(USE_TENSOR_FP16)
+    const std::vector<__half>& input,
+    std::vector<__half>& output_pol,
+    std::vector<__half>& output_val,
+#else
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
+#endif
     const bool full_batch)
 {
     if (m_draining.load()) {
@@ -328,7 +336,11 @@ bool GPUScheduler<net_t>::forward(
     }
     entry->cv.wait(lk);
 
+#if defined(USE_TENSOR_FP16)
+    if (output_pol[0] == static_cast<__half>(-1)) {
+#else
     if (output_pol[0] == -1.0f) {
+#endif
         return false;
     }
     return true;
@@ -378,9 +390,15 @@ void GPUScheduler<net_t>::batch_worker(
         m_forward_queue.erase(begin(m_forward_queue), end);
         return inputs;
     };
+#if defined(USE_TENSOR_FP16)
+    auto batch_input = std::vector<__half>(in_size * cfg_batch_size);
+    auto batch_output_pol = std::vector<__half>(out_pol_size * cfg_batch_size);
+    auto batch_output_val = std::vector<__half>(out_val_size * cfg_batch_size);
+#else
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
     auto batch_output_pol = std::vector<float>(out_pol_size * cfg_batch_size);
     auto batch_output_val = std::vector<float>(out_val_size * cfg_batch_size);
+#endif
     while (true) {
         auto inputs = pickup_task();
 
@@ -416,7 +434,11 @@ void GPUScheduler<net_t>::batch_worker(
             );
         } else {
             for (size_t i = 0; i < index; i++) {
+#if defined(USE_TENSOR_FP16)
+                batch_output_pol[out_pol_size * i] = static_cast<__half>(-1);
+#else
                 batch_output_pol[out_pol_size * i] = -1.0f;
+#endif
             }
         }
         // Get output and copy back
@@ -459,7 +481,9 @@ void GPUScheduler<net_t>::resume()
     m_draining.exchange(false);
 }
 
+#if !defined(USE_TENSOR_FP16)
 template class GPUScheduler<float>;
+#endif
 template class GPUScheduler<__half>;
 
 #endif
