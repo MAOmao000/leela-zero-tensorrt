@@ -121,7 +121,7 @@ add_executable(leelaz $<TARGET_OBJECTS:objs> ${NEURALNET_BACKEND_SOURCES} ${leel
 
 target_compile_features(leelaz PUBLIC cxx_std_17 c_std_17)
 
-if(USE_BACKEND STREQUAL "TENSORRT")
+if(USE_BACKEND STREQUAL "TENSORRT" OR USE_BACKEND STREQUAL "TENSORRT16")
   message(STATUS "Looking for system TensorRT and CuDNN library.")
   find_package(CUDAToolkit REQUIRED)
   find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS ${TENSORRT_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
