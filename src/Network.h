@@ -104,10 +104,6 @@ public:
     size_t get_estimated_cache_size();
     void nncache_resize(int max_count);
     void nncache_clear();
-    void get_hit_rate() {
-        auto hit_rate = m_nncache.hit_rate();
-        Utils::myprintf_error("hits:%d lookups:%d\n", hit_rate.first, hit_rate.second);
-    }
 
     void drain_evals();
 
