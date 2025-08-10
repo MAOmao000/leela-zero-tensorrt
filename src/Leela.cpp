@@ -111,6 +111,7 @@ static void calculate_thread_count_gpu(
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
                 / (gpu_count * cfg_gpu_batch);
+            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -130,6 +131,7 @@ static void calculate_thread_count_gpu(
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
                 / (gpu_count * cfg_gpu_batch);
+            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -211,7 +213,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Default is to auto which automatically determines which one to use.")
 #endif
 #if defined(USE_OPENCL)
-        ("gpu_batch", po::value<std::string>()->default_value("double"),
+        ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
         ("tune-only", "Tune OpenCL only and then exit.")
