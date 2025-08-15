@@ -40,7 +40,15 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+namespace TimeManagement {
+    enum enabled_t {
+        AUTO = -1, OFF = 0, ON = 1, FAST = 2, NO_PRUNING = 3
+    };
+};
+
+class UCTSearch;
+
+#if defined(USE_TENSOR_RT)
 #include <iostream>
 #include "NvInfer.h"
 
@@ -146,7 +154,7 @@ extern bool cfg_dumbpass;
 #if !defined(USE_CPU_ONLY)
 extern std::vector<int> cfg_gpus;
 extern size_t cfg_gpu_batch;
-#if !defined(USE_TENSOR_FP16)
+#if !defined(USE_TENSOR_RT)
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
@@ -187,7 +195,9 @@ extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_check_nodes;
+extern int cfg_ladder_penalty_base;
 extern float cfg_ladder_penalty_winrate;
+extern float cfg_ladder_penalty_policy;
 extern float cfg_ladder_min_policy;
 
 extern AnalyzeTags cfg_analyze_tags;

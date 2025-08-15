@@ -195,8 +195,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_check_nodes", po::value<int>()->default_value(cfg_ladder_check_nodes),
                       "Number of nodes to check ladder.")
+        ("ladder_penalty_base", po::value<int>()->default_value(cfg_ladder_penalty_base),
+                      "Indice of defensive penalty node to check ladder.")
         ("ladder_penalty_winrate", po::value<float>(),
                       "The rate at which the ladder reduces the winning rate of the board.")
+        ("ladder_penalty_policy", po::value<float>(),
+                      "The rate at which the ladder reduces the defensive policy.")
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
         ;
@@ -207,7 +211,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 "ID of the GPU device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-#if !defined(USE_TENSOR_FP16)
+#if !defined(USE_TENSOR_RT)
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
@@ -364,7 +368,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         printf("Unexpected option for --gpu_batch, single/double.\n");
         exit(EXIT_FAILURE);
     }
-#if !defined(USE_TENSOR_FP16)
+#if !defined(USE_TENSOR_RT)
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
         if ("single" == precision) {
@@ -557,8 +561,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_check_nodes = vm["ladder_check_nodes"].as<int>();
     }
 
+    if (vm.count("ladder_penalty_base")) {
+        cfg_ladder_penalty_base = vm["ladder_penalty_base"].as<int>();
+    }
+
     if (vm.count("ladder_penalty_winrate")) {
         cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
+    }
+
+    if (vm.count("ladder_penalty_policy")) {
+        cfg_ladder_penalty_policy = vm["ladder_penalty_policy"].as<float>();
     }
 
     if (vm.count("ladder_min_policy")) {

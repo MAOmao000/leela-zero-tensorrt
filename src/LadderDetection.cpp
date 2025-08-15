@@ -602,12 +602,11 @@ void LadderDetection(
     Network::Netresult& result
     )
 {
-    using NET_T = decltype(result.winrate);
-    std::array<NET_T, NUM_INTERSECTIONS> policy(result.policy);
+    std::array<float, NUM_INTERSECTIONS> policy(result.policy);
     std::stable_sort(rbegin(policy), rend(policy));
     auto check_nodes = cfg_ladder_check_nodes;
     for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
-        if (policy[i] < static_cast<NET_T>(cfg_ladder_min_policy)) {
+        if (policy[i] < cfg_ladder_min_policy) {
             check_nodes = i;
             break;
         }
@@ -628,7 +627,7 @@ void LadderDetection(
         const auto y = i / BOARD_SIZE;
         const auto vertex = state->board.get_vertex(x, y);
         if (state->board.get_state(vertex) != FastBoard::EMPTY
-            || result.policy[i] < static_cast<NET_T>(ladder_min_policy)
+            || result.policy[i] < ladder_min_policy
             || !state->is_move_legal(turn_color, vertex)) {
             continue;
         }
@@ -649,19 +648,19 @@ void LadderDetection(
                     myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
                         move_string.c_str(),
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
-                        depth, static_cast<float>(result.policy[i]));
+                        depth, result.policy[i]);
 #endif
-                    auto j = 1;
+                    auto j = cfg_ladder_penalty_base;
                     for (; j < check_nodes; j++) {
                         if (result.policy[i] > policy[j]) {
-                            result.policy[i] = policy[j] * static_cast<NET_T>(0.9);
+                            result.policy[i] = policy[j] * cfg_ladder_penalty_policy;
                             break;
                         }
                     }
                     if (j < check_nodes && cfg_ladder_penalty_winrate > 0.0f) {
                         result.winrate -=
-                            result.winrate * result.policy[i] * static_cast<NET_T>(cfg_ladder_penalty_winrate);
-                        result.winrate = std::max(static_cast<NET_T>(0.001), result.winrate);
+                            result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                        result.winrate = std::max(0.001f, result.winrate);
                     }
                     state->undo_move();
                     continue;
@@ -683,10 +682,10 @@ void LadderDetection(
 #endif
             if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
-                    result.winrate * result.policy[i] * static_cast<NET_T>(cfg_ladder_penalty_winrate);
-                result.winrate = std::max(static_cast<NET_T>(0.001), result.winrate);
+                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                result.winrate = std::max(0.001f, result.winrate);
             }
-            result.policy[i] = static_cast<NET_T>(0.0);
+            result.policy[i] = 0.0f;
         }
         state->undo_move();
     }

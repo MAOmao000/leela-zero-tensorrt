@@ -80,7 +80,7 @@ bool cfg_dumbpass;
 #if !defined(USE_CPU_ONLY)
 std::vector<int> cfg_gpus;
 size_t cfg_gpu_batch;
-#if !defined(USE_TENSOR_FP16)
+#if !defined(USE_TENSOR_RT)
 precision_t cfg_precision;
 #endif
 #if defined(USE_OPENCL)
@@ -115,7 +115,9 @@ int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_check_nodes;
+int cfg_ladder_penalty_base;
 float cfg_ladder_penalty_winrate;
+float cfg_ladder_penalty_policy;
 float cfg_ladder_min_policy;
 
 AnalyzeTags cfg_analyze_tags;
@@ -345,7 +347,7 @@ void GTP::setup_default_parameters() {
     cfg_batch_size = 1;
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;
-    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
+    cfg_max_playouts = 20000; // UCTSearch::UNLIMITED_PLAYOUTS;
     cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
@@ -357,7 +359,7 @@ void GTP::setup_default_parameters() {
 #if !defined(USE_CPU_ONLY)
     cfg_gpus = {};
     cfg_gpu_batch = 1;
-#if !defined(USE_TENSOR_FP16)
+#if !defined(USE_TENSOR_RT)
     cfg_precision = precision_t::AUTO;
 #endif
 #if defined(USE_OPENCL)
@@ -395,7 +397,9 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;
     cfg_offense_stones = 4;
     cfg_ladder_check_nodes = 10;
+    cfg_ladder_penalty_base = 1;
     cfg_ladder_penalty_winrate = 0.9f;
+    cfg_ladder_penalty_policy = 0.5f;
     cfg_ladder_min_policy = 0.0005f;
 
     cfg_analyze_tags = AnalyzeTags{};
