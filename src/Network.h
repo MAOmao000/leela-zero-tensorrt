@@ -86,15 +86,14 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if defined(USE_OPENCL)
     float benchmark_time(int centiseconds);
 #endif
     void benchmark(const GameState* state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
 
-    template <typename net_t>
-    static std::vector<net_t> gather_features(const GameState* state,
+    static std::vector<float> gather_features(const GameState* state,
                                               int symmetry);
     static std::pair<int, int> get_symmetry(const std::pair<int, int>& vertex,
                                             int symmetry,
@@ -127,10 +126,10 @@ private:
                              Network::Netresult& result,
                              const bool full_batch,
                              bool selfcheck = false);
-    template <typename net_t>
+
     static void fill_input_plane_pair(const FullBoard& board,
-                                      typename std::vector<net_t>::iterator black,
-                                      typename std::vector<net_t>::iterator white,
+                                      std::vector<float>::iterator black,
+                                      std::vector<float>::iterator white,
                                       int symmetry);
     bool probe_cache(const GameState* state, Network::Netresult& result);
     std::unique_ptr<ForwardPipe>&& init_net(

@@ -46,23 +46,6 @@ public:
     // Minimum size of the cache in number of items.
     static constexpr int MIN_CACHE_COUNT = 6'000;
 
-#if defined(USE_TENSOR_FP16)
-    struct Netresult {
-        // 19x19 board positions
-        std::array<__half, NUM_INTERSECTIONS> policy;
-
-        // pass
-        __half policy_pass;
-
-        // winrate
-        __half winrate;
-
-        Netresult() : policy_pass(static_cast<__half>(0)),
-            winrate(static_cast<__half>(0)) {
-            policy.fill(static_cast<__half>(0));
-        }
-    };
-#else
     struct Netresult {
         // 19x19 board positions
         std::array<float, NUM_INTERSECTIONS> policy;
@@ -77,7 +60,6 @@ public:
             policy.fill(0.0f);
         }
     };
-#endif
 
     static constexpr size_t ENTRY_SIZE = sizeof(Netresult)
                                          + sizeof(std::uint64_t)

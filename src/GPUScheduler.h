@@ -42,27 +42,12 @@
 #include "SMP.h"
 #include "ThreadPool.h"
 
-template <typename net_t>
 class GPUScheduler : public ForwardPipe {
     class ForwardQueueEntry {
     public:
         std::mutex mutex;
         std::condition_variable cv;
         const bool full_batch;
-#if defined(USE_TENSOR_FP16)
-        const std::vector<__half>& in;
-        std::vector<__half>& out_p;
-        std::vector<__half>& out_v;
-        ForwardQueueEntry(
-            const std::vector<__half>& input,
-            std::vector<__half>& output_pol,
-            std::vector<__half>& output_val,
-            const bool full)
-                : full_batch(full),
-                in(input),
-                out_p(output_pol),
-                out_v(output_val) {}
-#else
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
@@ -75,7 +60,6 @@ class GPUScheduler : public ForwardPipe {
                 in(input),
                 out_p(output_pol),
                 out_v(output_val) {}
-#endif
     };
 
 public:
@@ -93,22 +77,12 @@ public:
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights
     ) override;
-#if defined(USE_TENSOR_FP16)
-    bool forward(
-        const std::vector<__half>& input,
-        std::vector<__half>& output_pol,
-        std::vector<__half>& output_val,
-        const bool full_batch
-    ) override;
-#else
-    bool needs_autodetect() override;
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
         const bool full_batch
     ) override;
-#endif
 
 private:
     void push_input_convolution(
@@ -147,7 +121,7 @@ private:
 
     bool m_running = true;
     std::atomic<bool> m_draining{false};
-    std::vector<std::unique_ptr<BackendTRT<net_t>>> m_backend;
+    std::vector<std::unique_ptr<BackendTRT>> m_backend;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;

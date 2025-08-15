@@ -204,7 +204,6 @@ public:
     }
 };
 
-template <typename net_t>
 class BackendTRT {
 public:
     BackendTRT() {}
@@ -265,15 +264,6 @@ public:
         const std::vector<float>& ip2_b
     );
 
-#if defined(USE_TENSOR_FP16)
-    void forward(
-        const std::vector<__half>& input,
-        std::vector<__half>& output_pol,
-        std::vector<__half>& output_val,
-        const int tid,
-        const size_t batch_size = 1
-    );
-#else
     void forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
@@ -281,50 +271,22 @@ public:
         const int tid,
         const size_t batch_size = 1
     );
-
-    bool has_fp16_compute() const {
-        return m_fp16_compute;
-    }
-
-    bool has_tensor_cores() const {
-        return m_tensorcore;
-    }
-#endif
 
     std::vector<BackendLayer> m_layers;
     std::vector<std::unique_ptr<BackendContext>> m_context;
 
 private:
-#if defined(USE_TENSOR_FP16)
-    void forward_activations(
-        const std::vector<__half>& input,
-        std::vector<__half>& output_pol,
-        std::vector<__half>& output_val,
-        BackendContext& cudnn_context,
-        const size_t batch_size = 1
-    );
-#else
     void forward_activations(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
-        BackendContext& cudnn_context,
+        BackendContext& trt_context,
         const size_t batch_size = 1
     );
-#endif
 
     void push_weights(
         const size_t layer,
-        const std::vector<float>& weights_float,
-        const bool host_mem = false
-    );
-
-    void push_weights_col_major(
-        const size_t layer,
-        const std::vector<float>& weights_float,
-        const int row,
-        const int column,
-        const int channels = 1,
+        const std::vector<float>& weights,
         const bool host_mem = false
     );
 
@@ -386,10 +348,5 @@ private:
     cudaDeviceProp m_device_prop{};
     std::string m_model_hash{""};
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
-
-#if !defined(USE_TENSOR_FP16)
-    bool m_fp16_compute{false};
-    bool m_tensorcore{false};
-#endif
 };
 #endif

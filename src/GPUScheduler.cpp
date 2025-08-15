@@ -29,7 +29,7 @@
 */
 #include "config.h"
 
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
 
 #include "GPUScheduler.h"
 #include "BackendTensorRT.h"
@@ -37,8 +37,7 @@
 #include "Random.h"
 #include "Utils.h"
 
-template <typename net_t>
-GPUScheduler<net_t>::GPUScheduler()
+GPUScheduler::GPUScheduler()
 {
     // multi-gpu?
     auto gpus = cfg_gpus;
@@ -50,15 +49,14 @@ GPUScheduler<net_t>::GPUScheduler()
 
     auto silent{false};
     for (auto gpu : gpus) {
-        auto net = std::make_unique<BackendTRT<net_t>>(gpu, silent);
+        auto net = std::make_unique<BackendTRT>(gpu, silent);
         m_backend.emplace_back(std::move(net));
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::initialize(
+void GPUScheduler::initialize(
     const int channels,
     const NetworkType net_type,
     const std::string &model_hash)
@@ -77,16 +75,14 @@ void GPUScheduler<net_t>::initialize(
         backend->initialize(net_type, num_worker_threads, model_hash);
 
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
-            auto t =
-                std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
+            auto t = std::thread(&GPUScheduler::batch_worker, this, gnum, i);
             m_worker_threads.push_back(std::move(t));
         }
         gnum++;
     }
 }
 
-template <typename net_t>
-GPUScheduler<net_t>::~GPUScheduler()
+GPUScheduler::~GPUScheduler()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
@@ -130,22 +126,7 @@ GPUScheduler<net_t>::~GPUScheduler()
     }
 }
 
-#if !defined(USE_TENSOR_FP16)
-template <typename net_t>
-bool GPUScheduler<net_t>::needs_autodetect()
-{
-    for (auto& backend : m_backend) {
-        // If any card has no native fp16 compute, we'll have to benchmark.
-        if (!backend->has_fp16_compute() && !backend->has_tensor_cores()) {
-            return true;
-        }
-    }
-    return false;
-}
-#endif
-
-template <typename net_t>
-void GPUScheduler<net_t>::push_input_convolution(
+void GPUScheduler::push_input_convolution(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -163,8 +144,7 @@ void GPUScheduler<net_t>::push_input_convolution(
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::push_residual(
+void GPUScheduler::push_residual(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -184,8 +164,7 @@ void GPUScheduler<net_t>::push_residual(
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::push_residual_se(
+void GPUScheduler::push_residual_se(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -209,8 +188,7 @@ void GPUScheduler<net_t>::push_residual_se(
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::push_convolve(
+void GPUScheduler::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -224,9 +202,9 @@ void GPUScheduler<net_t>::push_convolve(
                 outputs,
                 weights->m_conv_pol_w,
                 weights->m_bn_pol_w1,
-                weights->m_ip_pol_w, 
+                weights->m_ip_pol_w,
                 weights->m_ip_pol_b,
-                weights->m_ip_pol_w, 
+                weights->m_ip_pol_w,
                 weights->m_ip_pol_b
             );
         } else {
@@ -245,15 +223,13 @@ void GPUScheduler<net_t>::push_convolve(
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::push_weights(
+void GPUScheduler::push_weights(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
     const std::shared_ptr<const ForwardPipeWeights> weights)
 {
     auto weight_index = size_t{0};
-    // Winograd filter transformation changes filter size to 4x4
     push_input_convolution(
         filter_size,
         channels,
@@ -306,22 +282,16 @@ void GPUScheduler<net_t>::push_weights(
     cudaStreamSynchronize(cudaStreamPerThread);
 }
 
-template <typename net_t>
-bool GPUScheduler<net_t>::forward(
-#if defined(USE_TENSOR_FP16)
-    const std::vector<__half>& input,
-    std::vector<__half>& output_pol,
-    std::vector<__half>& output_val,
-#else
+bool GPUScheduler::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
-#endif
     const bool full_batch)
 {
     if (m_draining.load()) {
         return false;
     }
+
     auto entry =
         std::make_shared<ForwardQueueEntry>(input, output_pol, output_val, full_batch);
     size_t queue_size = 0;
@@ -335,19 +305,13 @@ bool GPUScheduler<net_t>::forward(
         m_cv.notify_one();
     }
     entry->cv.wait(lk);
-
-#if defined(USE_TENSOR_FP16)
-    if (output_pol[0] == static_cast<__half>(-1)) {
-#else
     if (output_pol[0] == -1.0f) {
-#endif
         return false;
     }
     return true;
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::batch_worker(
+void GPUScheduler::batch_worker(
     const size_t gnum,
     const size_t tid)
 {
@@ -390,15 +354,9 @@ void GPUScheduler<net_t>::batch_worker(
         m_forward_queue.erase(begin(m_forward_queue), end);
         return inputs;
     };
-#if defined(USE_TENSOR_FP16)
-    auto batch_input = std::vector<__half>(in_size * cfg_batch_size);
-    auto batch_output_pol = std::vector<__half>(out_pol_size * cfg_batch_size);
-    auto batch_output_val = std::vector<__half>(out_val_size * cfg_batch_size);
-#else
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
     auto batch_output_pol = std::vector<float>(out_pol_size * cfg_batch_size);
     auto batch_output_val = std::vector<float>(out_val_size * cfg_batch_size);
-#endif
     while (true) {
         auto inputs = pickup_task();
 
@@ -434,11 +392,7 @@ void GPUScheduler<net_t>::batch_worker(
             );
         } else {
             for (size_t i = 0; i < index; i++) {
-#if defined(USE_TENSOR_FP16)
-                batch_output_pol[out_pol_size * i] = static_cast<__half>(-1);
-#else
                 batch_output_pol[out_pol_size * i] = -1.0f;
-#endif
             }
         }
         // Get output and copy back
@@ -460,8 +414,7 @@ void GPUScheduler<net_t>::batch_worker(
     }
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::drain()
+void GPUScheduler::drain()
 {
     // When signaled to drain requests, this method picks up all pending
     // requests and wakes them up.  Throws exception once the woken up request
@@ -470,8 +423,7 @@ void GPUScheduler<net_t>::drain()
     m_cv.notify_all();
 }
 
-template <typename net_t>
-void GPUScheduler<net_t>::resume()
+void GPUScheduler::resume()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
@@ -480,10 +432,4 @@ void GPUScheduler<net_t>::resume()
     // UCTNode::think() should wait for all child threads to complete before resuming.
     m_draining.exchange(false);
 }
-
-#if !defined(USE_TENSOR_FP16)
-template class GPUScheduler<float>;
-#endif
-template class GPUScheduler<__half>;
-
 #endif

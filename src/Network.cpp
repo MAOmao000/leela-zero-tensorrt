@@ -50,7 +50,7 @@
 #if defined(USE_OPENCL)
 #include "OpenCLScheduler.h"
 #endif
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
 #include "GPUScheduler.h"
 #endif
 #include "UCTNode.h"
@@ -72,7 +72,7 @@ using namespace Utils;
 static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
     symmetry_nn_idx_table;
 
-#if defined(USE_OPENCL) || defined(USE_TENSOR_RT)
+#if defined(USE_OPENCL)
 float Network::benchmark_time(const int centiseconds) {
 
     ThreadGroup tg(thread_pool);
@@ -264,7 +264,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     wtfile.clear();
     wtfile.seekg(0, std::ios::beg);
 
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
     auto fileSize = wtfile.tellg();
     std::string str;
     str.resize(fileSize);
@@ -485,7 +485,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
     pipe->initialize(channels, m_net_type, m_model_hash);
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
     pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
 #else
     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
@@ -496,35 +496,28 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 
 #if !defined(USE_CPU_ONLY)
 void Network::select_precision(const int channels) {
-#if defined(USE_TENSOR_FP16)
-    myprintf("Initializing TensorRT (half precision).\n");
-    m_forward = init_net(
-        channels, std::make_unique<GPUScheduler<__half>>());
-#else
 #if defined(USE_TENSOR_RT)
-    using FloatScheduler = GPUScheduler<float>;
-    using HalfScheduler = GPUScheduler<__half>;
-    const char backend[] = "TensorRT";
+    myprintf("Initializing TensorRT (single precision).\n");
+    m_forward = init_net(
+        channels, std::make_unique<GPUScheduler>());
 #else
     using FloatScheduler = OpenCLScheduler<float>;
     using HalfScheduler = OpenCLScheduler<half_float::half>;
-    const char backend[] = "OpenCL";
-#endif
     if (cfg_precision == precision_t::AUTO) {
         auto score_fp16 = float{-1.0};
         auto score_fp32 = float{-1.0};
-        myprintf("Initializing %s (autodetecting precision).\n", backend);
+        myprintf("Initializing OpenCL (autodetecting precision).\n");
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
         auto fp16_net = std::make_unique<HalfScheduler>();
         if (!fp16_net->needs_autodetect()) {
             try {
-                myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
+                myprintf("OpenCL: using fp16/half or tensor core compute support.\n");
                 m_forward = init_net(channels, std::move(fp16_net));
                 score_fp16 = benchmark_time(100);
             } catch (...) {
-                myprintf("%s: fp16/half or tensor core failed "
-                         "despite driver claiming support.\n", backend);
+                myprintf("OpenCL: fp16/half or tensor core failed "
+                         "despite driver claiming support.\n");
                 myprintf("Falling back to single precision\n");
                 m_forward.reset();
                 m_forward = init_net(
@@ -544,31 +537,31 @@ void Network::select_precision(const int channels) {
                 myprintf("Both single precision and half precision failed to run.\n");
                 throw std::runtime_error("Failed to initialize net.");
             } else if (score_fp16 < 0.0f) {
-                myprintf("Using %s single precision (half precision failed to run).\n", backend);
+                myprintf("Using OpenCL single precision (half precision failed to run).\n");
             } else if (score_fp32 < 0.0f) {
-                myprintf("Using %s half precision (single precision failed to run).\n", backend);
+                myprintf("Using OpenCL half precision (single precision failed to run).\n");
                 m_forward.reset();
                 m_forward =
                     init_net(channels, std::make_unique<HalfScheduler>());
             } else if (score_fp32 * 1.05f > score_fp16) {
-                myprintf("Using %s single precision (less than 5%% slower than half).\n", backend);
+                myprintf("Using OpenCL single precision (less than 5%% slower than half).\n");
             } else {
-                myprintf("Using %s half precision (at least 5%% faster than single).\n", backend);
+                myprintf("Using OpenCL half precision (at least 5%% faster than single).\n");
                 m_forward.reset();
                 m_forward =
                     init_net(channels, std::make_unique<HalfScheduler>());
             }
         } else {
-            myprintf("Initializing %s (single precision).\n", backend);
+            myprintf("Initializing OpenCL (single precision).\n");
             m_forward =
                 init_net(channels, std::make_unique<FloatScheduler>());
         }
     } else if (cfg_precision == precision_t::SINGLE) {
-        myprintf("Initializing %s (single precision).\n", backend);
+        myprintf("Initializing , backend (single precision).\n");
         m_forward =
             init_net(channels, std::make_unique<FloatScheduler>());
     } else if (cfg_precision == precision_t::HALF) {
-        myprintf("Initializing %s (half precision).\n", backend);
+        myprintf("Initializing , backend (half precision).\n");
         m_forward = init_net(
             channels, std::make_unique<HalfScheduler>());
     }
@@ -625,14 +618,14 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     auto bias_size = m_fwd_weights->m_conv_biases.size();
     for (auto i = size_t{0}; i < bias_size; i++) {
         auto means_size = m_fwd_weights->m_batchnorm_means[i].size();
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
         auto weights_size = m_fwd_weights->m_conv_weights[i].size();
 #endif
         for (auto j = size_t{0}; j < means_size; j++) {
             m_fwd_weights->m_batchnorm_means[i][j] -=
                 m_fwd_weights->m_conv_biases[i][j];
             m_fwd_weights->m_conv_biases[i][j] = 0.0f;
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
             // out = stddev x (conv(in) x w + b - mean)
             //     = stddev x conv(in) x w + stddev x (b - mean)
             //     = conv(in) x (w x stddev) + stddev x (b - mean)
@@ -647,11 +640,11 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         }
     }
     auto means_size = m_fwd_weights->m_bn_val_w1.size();
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
     auto weights_size = m_fwd_weights->m_conv_val_w.size();
 #endif
     for (auto i = size_t{0}; i < means_size; i++) {
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
         for (auto k = size_t{0}; k < weights_size / means_size; k++) {
             m_fwd_weights->m_conv_val_w[i * weights_size / means_size + k] *=
                 m_fwd_weights->m_bn_val_w2[i];
@@ -665,11 +658,11 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         m_fwd_weights->m_conv_val_b[i] = 0.0f;
     }
     means_size = m_fwd_weights->m_bn_pol_w1.size();
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
     weights_size = m_fwd_weights->m_conv_pol_w.size();
 #endif
     for (auto i = size_t{0}; i < means_size; i++) {
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
         for (auto k = size_t{0}; k < weights_size / means_size; k++) {
             m_fwd_weights->m_conv_pol_w[i * weights_size / means_size + k] *=
                 m_fwd_weights->m_bn_pol_w2[i];
@@ -766,7 +759,6 @@ bool Network::get_output(
     const bool read_cache, const bool write_cache,
     const bool force_selfcheck) {
 
-    using NET_T = decltype(result.winrate);
     if (state->board.get_boardsize() != BOARD_SIZE) {
         return false;
     }
@@ -791,13 +783,13 @@ bool Network::get_output(
                 break;
             }
             result.winrate +=
-                tmpresult.winrate / static_cast<NET_T>(NUM_SYMMETRIES);
+                tmpresult.winrate / static_cast<float>(NUM_SYMMETRIES);
             result.policy_pass +=
-                tmpresult.policy_pass / static_cast<NET_T>(NUM_SYMMETRIES);
+                tmpresult.policy_pass / static_cast<float>(NUM_SYMMETRIES);
 
             for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
                 result.policy[idx] +=
-                    tmpresult.policy[idx] / static_cast<NET_T>(NUM_SYMMETRIES);
+                    tmpresult.policy[idx] / static_cast<float>(NUM_SYMMETRIES);
             }
         }
     } else {
@@ -829,7 +821,7 @@ bool Network::get_output(
     // v2 format (ELF Open Go) returns black value, not stm (side to move)
     if (m_value_head_not_stm) {
         if (state->board.get_to_move() == FastBoard::WHITE) {
-            result.winrate = static_cast<NET_T>(1) - result.winrate;
+            result.winrate = 1.0f - result.winrate;
         }
     }
 
@@ -852,10 +844,9 @@ bool Network::get_output_internal(const GameState* state,
                                   bool selfcheck) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-    using NET_T = decltype(result.winrate);
-    const auto input_data = gather_features<NET_T>(state, symmetry);
-    std::vector<NET_T> policy_data(POTENTIAL_MOVES);
-    std::vector<NET_T> value_data(1);
+    const auto input_data = gather_features(state, symmetry);
+    std::vector<float> policy_data(POTENTIAL_MOVES);
+    std::vector<float> value_data(1);
 #ifdef USE_OPENCL_SELFCHECK
     if (selfcheck && m_forward_cpu != nullptr) {
         if (!m_forward_cpu->forward(input_data, policy_data, value_data, full_batch)) {
@@ -881,14 +872,13 @@ bool Network::get_output_internal(const GameState* state,
     result.policy_pass = policy_data[NUM_INTERSECTIONS];
     // Now get the value
     // Map TanH output range [-1..1] to [0..1] range
-    result.winrate = (static_cast<NET_T>(1) + value_data[0]) / static_cast<NET_T>(2);
+    result.winrate = (1.0f + value_data[0]) / 2.0f;
 
     return true;
 }
 
 void Network::show_heatmap(const FastState* const state,
                            const Netresult& result, const bool topmoves) {
-    using NET_T = decltype(result.winrate);
     std::vector<std::string> display_map;
     std::string line;
 
@@ -897,8 +887,7 @@ void Network::show_heatmap(const FastState* const state,
             auto policy = 0;
             const auto vertex = state->board.get_vertex(x, y);
             if (state->board.get_state(vertex) == FastBoard::EMPTY) {
-                policy = static_cast<int>(result.policy[y * BOARD_SIZE + x]
-                    * static_cast<NET_T>(1000));
+                policy = static_cast<int>(result.policy[y * BOARD_SIZE + x] * 1000.0f);
             }
 
             line += boost::str(boost::format("%3d ") % policy);
@@ -911,7 +900,7 @@ void Network::show_heatmap(const FastState* const state,
     for (int i = static_cast<int>(display_map.size() - 1); i >= 0; --i) {
         myprintf("%s\n", display_map[i].c_str());
     }
-    const auto pass_policy = int(result.policy_pass * static_cast<NET_T>(1000));
+    const auto pass_policy = int(result.policy_pass * 1000.0f);
     myprintf("pass: %d\n", pass_policy);
     myprintf("winrate: %f\n", result.winrate);
 
@@ -922,10 +911,10 @@ void Network::show_heatmap(const FastState* const state,
             const auto y = i / BOARD_SIZE;
             const auto vertex = state->board.get_vertex(x, y);
             if (state->board.get_state(vertex) == FastBoard::EMPTY) {
-                moves.emplace_back(static_cast<float>(result.policy[i]), vertex);
+                moves.emplace_back(result.policy[i], vertex);
             }
         }
-        moves.emplace_back(static_cast<float>(result.policy_pass), FastBoard::PASS);
+        moves.emplace_back(result.policy_pass, FastBoard::PASS);
 
         std::stable_sort(rbegin(moves), rend(moves));
 
@@ -940,10 +929,9 @@ void Network::show_heatmap(const FastState* const state,
     }
 }
 
-template <typename net_t>
 void Network::fill_input_plane_pair(const FullBoard& board,
-                                    typename std::vector<net_t>::iterator black,
-                                    typename std::vector<net_t>::iterator white,
+                                    std::vector<float>::iterator black,
+                                    std::vector<float>::iterator white,
                                     const int symmetry) {
     for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
@@ -951,18 +939,17 @@ void Network::fill_input_plane_pair(const FullBoard& board,
         const auto y = sym_idx / BOARD_SIZE;
         const auto color = board.get_state(x, y);
         if (color == FastBoard::BLACK) {
-            black[idx] = net_t(true);
+            black[idx] = float(true);
         } else if (color == FastBoard::WHITE) {
-            white[idx] = net_t(true);
+            white[idx] = float(true);
         }
     }
 }
 
-template <typename net_t>
-std::vector<net_t> Network::gather_features(const GameState* const state,
+std::vector<float> Network::gather_features(const GameState* const state,
                                             const int symmetry) {
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-    auto input_data = std::vector<net_t>(INPUT_CHANNELS * NUM_INTERSECTIONS);
+    auto input_data = std::vector<float>(INPUT_CHANNELS * NUM_INTERSECTIONS);
 
     const auto to_move = state->get_to_move();
     const auto blacks_move = to_move == FastBoard::BLACK;
@@ -982,12 +969,12 @@ std::vector<net_t> Network::gather_features(const GameState* const state,
     // Go back in time, fill history boards
     for (auto h = size_t{0}; h < moves; h++) {
         // collect white, black occupation planes
-        fill_input_plane_pair<net_t>(state->get_past_board(static_cast<int>(h)),
-                                     black_it + h * NUM_INTERSECTIONS,
-                                     white_it + h * NUM_INTERSECTIONS, symmetry);
+        fill_input_plane_pair(state->get_past_board(static_cast<int>(h)),
+                              black_it + h * NUM_INTERSECTIONS,
+                              white_it + h * NUM_INTERSECTIONS, symmetry);
     }
 
-    std::fill(to_move_it, to_move_it + NUM_INTERSECTIONS, net_t(true));
+    std::fill(to_move_it, to_move_it + NUM_INTERSECTIONS, float(true));
 
     return input_data;
 }
