@@ -30,11 +30,7 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
-#if defined(USE_TENSOR_FP16)
-#undef USE_CPU_ONLY
-#undef USE_OPENCL
-#undef USE_TENSOR_RT
-#elif defined(USE_TENSOR_RT)
+#if defined(USE_TENSOR_RT)
 #undef USE_CPU_ONLY
 #undef USE_OPENCL
 #elif defined(USE_OPENCL)
@@ -84,9 +80,7 @@ static constexpr auto PROGRAM_VERSION_PATCH = "6";
 
 static constexpr auto MAX_CPUS = 256;
 
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
-#include <cuda_fp16.h>
-#elif defined(USE_OPENCL)
+#if defined(USE_OPENCL)
 /*
  * USE_HALF: Include the half-precision OpenCL implementation when building.
  * The current implementation autodetects whether half-precision is better

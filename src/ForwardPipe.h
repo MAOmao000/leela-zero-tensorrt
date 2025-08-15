@@ -76,12 +76,6 @@ public:
                             const NetworkType net_type,
                             const std::string &model_hash = "") = 0;
 
-#if defined(USE_TENSOR_FP16)
-    virtual bool forward(const std::vector<__half>& input,
-                         std::vector<__half>& output_pol,
-                         std::vector<__half>& output_val,
-                         const bool full_batch) = 0;
-#else
     virtual bool needs_autodetect() {
         return false;
     };
@@ -89,7 +83,6 @@ public:
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val,
                          const bool full_batch) = 0;
-#endif
     virtual void push_weights(
         const unsigned int filter_size,
         const unsigned int channels,
