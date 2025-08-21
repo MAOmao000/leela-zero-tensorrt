@@ -91,6 +91,9 @@ static void calculate_thread_count_gpu(
     // 1) if no args are given, use batch size of 5 and thread count of (batch size) * (number of gpus) * 2
     // 2) if number of threads are given, use batch size of (thread count) / (number of gpus) / 2
     // 3) if number of batches are given, use thread count of (batch size) * (number of gpus) * 2
+    if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
+        cfg_gpu_batch = 2;
+    }
     auto gpu_count = cfg_gpus.size();
     if (gpu_count == 0) {
         // size of zero if autodetect GPU : default to 1
@@ -127,6 +130,11 @@ static void calculate_thread_count_gpu(
             cfg_num_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
             if (cfg_num_threads > 1) {
                 cfg_num_threads -= 1;
+            }
+            if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
+                if (cfg_num_threads > 1) {
+                    cfg_num_threads -= 1;
+                }
             }
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
@@ -222,7 +230,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("full-tuner", "Try harder to find an optimal OpenCL tuning.")
         ("tune-only", "Tune OpenCL only and then exit.")
 #else
-        ("gpu_batch", po::value<std::string>()->default_value("single"),
+        ("gpu_batch", po::value<std::string>(),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
@@ -359,14 +367,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
-    auto gpu_batch = vm["gpu_batch"].as<std::string>();
-    if ("single" == gpu_batch) {
-        cfg_gpu_batch = 1;
-    } else if ("double" == gpu_batch) {
-        cfg_gpu_batch = 2;
-    } else {
-        printf("Unexpected option for --gpu_batch, single/double.\n");
-        exit(EXIT_FAILURE);
+    if (vm.count("gpu_batch")) {
+        auto gpu_batch = vm["gpu_batch"].as<std::string>();
+        if ("single" == gpu_batch) {
+            cfg_gpu_batch = 1;
+        } else if ("double" == gpu_batch) {
+            cfg_gpu_batch = 2;
+        } else {
+            printf("Unexpected option for --gpu_batch, single/double.\n");
+            exit(EXIT_FAILURE);
+        }
     }
 #if !defined(USE_TENSOR_RT)
     if (vm.count("precision")) {
@@ -460,12 +470,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (cfg_max_playouts == 0) {
             cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
         }
-    } else {
-#if defined(USE_CPU_ONLY)
-        cfg_max_playouts = 2500;
-#else
-        cfg_max_playouts = 20000;
-#endif
     }
 
     if (vm.count("visits")) {
