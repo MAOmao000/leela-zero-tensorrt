@@ -347,7 +347,7 @@ void GTP::setup_default_parameters() {
     cfg_batch_size = 1;
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;
-    cfg_max_playouts = 20000; // UCTSearch::UNLIMITED_PLAYOUTS;
+    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
     cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
@@ -655,6 +655,9 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         } else {
             gtp_fail_printf(id, "syntax not understood");
         }
+        if (game.has_resigned()) {
+            s_network->nncache_dump();
+        }
         return;
     } else if (command.find("genmove") == 0
                || command.find("lz-genmove_analyze") == 0) {
@@ -723,6 +726,9 @@ void GTP::execute(GameState& game, const std::string& xinput) {
             gtp_printf_raw("\n");
         }
         cfg_analyze_tags = {};
+        if (game.has_resigned()) {
+            s_network->nncache_dump();
+        }
         return;
     } else if (command.find("lz-analyze") == 0) {
         std::istringstream cmdstream(command);
@@ -966,7 +972,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         gtp_printf_raw("\n");
         return;
     } else if (command.find("clear_cache") == 0) {
-        s_network->nncache_clear();
+        s_network->nncache_clear(!game.has_resigned());
         gtp_printf(id, "");
         return;
     } else if (command.find("place_free_handicap") == 0) {
