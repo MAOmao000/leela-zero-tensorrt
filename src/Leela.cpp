@@ -219,11 +219,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 "ID of the GPU device(s) to use (disables autodetection).")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-#if !defined(USE_TENSOR_RT)
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
                       "Default is to auto which automatically determines which one to use.")
-#endif
 #if defined(USE_OPENCL)
         ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
@@ -261,7 +259,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("dynamic_k_base", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
-        ("ci_alpha", po::value<float>());
+        ("ci_alpha", po::value<float>())
+        ("lcb_visits_ratio", po::value<float>());
 
     po::options_description h_desc("Hidden options");
     h_desc.add_options()
@@ -343,6 +342,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("ci_alpha")) {
         cfg_ci_alpha = vm["ci_alpha"].as<float>();
     }
+    if (vm.count("lcb_visits_ratio")) {
+        cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
+    }
 
     if (vm.count("logfile")) {
         cfg_logfile = vm["logfile"].as<std::string>();
@@ -378,7 +380,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-#if !defined(USE_TENSOR_RT)
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
         if ("single" == precision) {
@@ -392,7 +393,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-#endif
 #if defined(USE_OPENCL)
     if (vm.count("full-tuner")) {
         if (cfg_precision == precision_t::AUTO) {

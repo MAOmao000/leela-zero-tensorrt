@@ -154,12 +154,10 @@ extern bool cfg_dumbpass;
 #if !defined(USE_CPU_ONLY)
 extern std::vector<int> cfg_gpus;
 extern size_t cfg_gpu_batch;
-#if !defined(USE_TENSOR_RT)
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
-#endif
 #if defined(USE_OPENCL)
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;

@@ -37,7 +37,8 @@
 #include "Random.h"
 #include "Utils.h"
 
-GPUScheduler::GPUScheduler()
+template <typename net_t>
+GPUScheduler<net_t>::GPUScheduler()
 {
     // multi-gpu?
     auto gpus = cfg_gpus;
@@ -49,14 +50,15 @@ GPUScheduler::GPUScheduler()
 
     auto silent{false};
     for (auto gpu : gpus) {
-        auto net = std::make_unique<BackendTRT>(gpu, silent);
+        auto net = std::make_unique<BackendTRT<net_t>>(gpu, silent);
         m_backend.emplace_back(std::move(net));
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
     }
 }
 
-void GPUScheduler::initialize(
+template <typename net_t>
+void GPUScheduler<net_t>::initialize(
     const int channels,
     const NetworkType net_type,
     const std::string &model_hash)
@@ -75,14 +77,15 @@ void GPUScheduler::initialize(
         backend->initialize(net_type, num_worker_threads, model_hash);
 
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
-            auto t = std::thread(&GPUScheduler::batch_worker, this, gnum, i);
+            auto t = std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
             m_worker_threads.push_back(std::move(t));
         }
         gnum++;
     }
 }
 
-GPUScheduler::~GPUScheduler()
+template <typename net_t>
+GPUScheduler<net_t>::~GPUScheduler()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
@@ -126,7 +129,8 @@ GPUScheduler::~GPUScheduler()
     }
 }
 
-void GPUScheduler::push_input_convolution(
+template <typename net_t>
+void GPUScheduler<net_t>::push_input_convolution(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -144,7 +148,8 @@ void GPUScheduler::push_input_convolution(
     }
 }
 
-void GPUScheduler::push_residual(
+template <typename net_t>
+void GPUScheduler<net_t>::push_residual(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -164,7 +169,8 @@ void GPUScheduler::push_residual(
     }
 }
 
-void GPUScheduler::push_residual_se(
+template <typename net_t>
+void GPUScheduler<net_t>::push_residual_se(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -188,7 +194,8 @@ void GPUScheduler::push_residual_se(
     }
 }
 
-void GPUScheduler::push_convolve(
+template <typename net_t>
+void GPUScheduler<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -223,7 +230,8 @@ void GPUScheduler::push_convolve(
     }
 }
 
-void GPUScheduler::push_weights(
+template <typename net_t>
+void GPUScheduler<net_t>::push_weights(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -282,7 +290,8 @@ void GPUScheduler::push_weights(
     cudaStreamSynchronize(cudaStreamPerThread);
 }
 
-bool GPUScheduler::forward(
+template <typename net_t>
+bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
@@ -311,7 +320,8 @@ bool GPUScheduler::forward(
     return true;
 }
 
-void GPUScheduler::batch_worker(
+template <typename net_t>
+void GPUScheduler<net_t>::batch_worker(
     const size_t gnum,
     const size_t tid)
 {
@@ -414,7 +424,8 @@ void GPUScheduler::batch_worker(
     }
 }
 
-void GPUScheduler::drain()
+template <typename net_t>
+void GPUScheduler<net_t>::drain()
 {
     // When signaled to drain requests, this method picks up all pending
     // requests and wakes them up.  Throws exception once the woken up request
@@ -423,7 +434,8 @@ void GPUScheduler::drain()
     m_cv.notify_all();
 }
 
-void GPUScheduler::resume()
+template <typename net_t>
+void GPUScheduler<net_t>::resume()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
@@ -432,4 +444,7 @@ void GPUScheduler::resume()
     // UCTNode::think() should wait for all child threads to complete before resuming.
     m_draining.exchange(false);
 }
+
+template class GPUScheduler<float>;
+template class GPUScheduler<__half>;
 #endif

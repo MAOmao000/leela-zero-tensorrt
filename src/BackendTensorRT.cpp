@@ -35,7 +35,26 @@
 using namespace Utils;
 using namespace nvinfer1;
 
-BackendTRT::BackendTRT(
+class from_float {
+public:
+    from_float(const std::vector<float>& f) : m_f(f) {}
+
+    operator const std::vector<float> &() {
+        return m_f;
+    }
+
+    operator std::vector<__half>() {
+        auto ret = std::vector<__half>(m_f.size());
+        std::copy(cbegin(m_f), cend(m_f), begin(ret));
+        return ret;
+    }
+
+private:
+    const std::vector<float>& m_f;
+};
+
+template <typename net_t>
+BackendTRT<net_t>::BackendTRT(
     const int gpu,
     const bool silent) {
 
@@ -101,7 +120,8 @@ BackendTRT::BackendTRT(
     m_device_prop = best_device;
 }
 
-void BackendTRT::initialize(
+template <typename net_t>
+void BackendTRT<net_t>::initialize(
     const NetworkType net_type,
     const size_t num_worker_threads,
     const std::string &model_hash) {
@@ -111,7 +131,8 @@ void BackendTRT::initialize(
     m_model_hash = model_hash;
 }
 
-bool BackendTRT::build(
+template <typename net_t>
+bool BackendTRT<net_t>::build(
     const int num_worker_threads,
     const int64_t batch_size) {
 
@@ -121,7 +142,7 @@ bool BackendTRT::build(
         PROGRAM_VERSION_MAJOR,
         PROGRAM_VERSION_MINOR,
         PROGRAM_VERSION_PATCH,
-        "single",
+        typeid(net_t) == typeid(float) ? "single" : "half",
         "1.0",                    // model version
         Network::INPUT_CHANNELS,  // number of input channels
         batch_size
@@ -137,7 +158,7 @@ bool BackendTRT::build(
         std::cerr << "TensorRT backend: failed to create builder config" << std::endl;
         return false;
     }
-    if (builder->platformHasFastFp16()) {
+    if (typeid(net_t) == typeid(__half)) {
         config->setFlag(BuilderFlag::kFP16);
     }
 
@@ -209,7 +230,7 @@ bool BackendTRT::build(
         }
         deviceIdent[sizeof(deviceIdent) - 1] = 0;
 
-        std::string precision = "single";
+        std::string precision = typeid(net_t) == typeid(float) ? "single" : "half";
         std::string sep_char{std::filesystem::path::preferred_separator};
 
         uint8_t tuneHash[32];
@@ -464,7 +485,8 @@ bool BackendTRT::build(
     return true;
 }
 
-bool BackendTRT::constructNetwork(
+template <typename net_t>
+bool BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
     std::string& tune_desc) {
 
@@ -839,7 +861,8 @@ bool BackendTRT::constructNetwork(
     return true;
 }
 
-ITensor* BackendTRT::initInputs(
+template <typename net_t>
+ITensor* BackendTRT<net_t>::initInputs(
     char const *inputName,
     TrtUniquePtr<INetworkDefinition>& network,
     const int channels,
@@ -858,7 +881,8 @@ ITensor* BackendTRT::initInputs(
     return inputFeature;
 }
 
-ILayer* BackendTRT::buildConvLayer(
+template <typename net_t>
+ILayer* BackendTRT<net_t>::buildConvLayer(
     ITensor* input,
     unsigned int filter_size,
     int64_t weights_size,
@@ -877,6 +901,7 @@ ILayer* BackendTRT::buildConvLayer(
         filter_size,
         outputs);
 
+    auto data_type = (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF;
     // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
     // matmul is mathmatically equivalent to a 2D convolution of 1x1 features and 1x1 kernels.
     auto convLayer = network->addConvolutionNd(
@@ -884,12 +909,12 @@ ILayer* BackendTRT::buildConvLayer(
         outputs,
         {2, {filter_size, filter_size}},
         {
-            DataType::kFLOAT,
+            data_type,
             weights,
             weights_size
         },
         {
-            DataType::kFLOAT,
+            data_type,
             biases,
             biases_size
         }
@@ -902,7 +927,8 @@ ILayer* BackendTRT::buildConvLayer(
     return convLayer;
 }
 
-ILayer* BackendTRT::buildActivationLayer(
+template <typename net_t>
+ILayer* BackendTRT<net_t>::buildActivationLayer(
     ITensor* input,
     TrtUniquePtr<INetworkDefinition>& network,
     std::string& tune_desc,
@@ -918,7 +944,8 @@ ILayer* BackendTRT::buildActivationLayer(
     return activationLayer;
 }
 
-ILayer* BackendTRT::applyGPoolLayer(
+template <typename net_t>
+ILayer* BackendTRT<net_t>::applyGPoolLayer(
     ITensor* input,
     TrtUniquePtr<INetworkDefinition>& network) {
 
@@ -930,11 +957,13 @@ ILayer* BackendTRT::applyGPoolLayer(
     return gpoolMeanLayer;
 }
 
-void BackendTRT::push_weights(
+template <typename net_t>
+void BackendTRT<net_t>::push_weights(
     const size_t layer,
-    const std::vector<float>& weights,
+    const std::vector<float>& weights_float,
     const bool use_host_mem) {
 
+    const std::vector<net_t> weights = from_float(weights_float);
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(BackendLayer());
     }
@@ -943,21 +972,21 @@ void BackendTRT::push_weights(
     if (use_host_mem) {
         void *host_mem;
         checkCUDA(cudaHostAlloc((void **)&host_mem,
-                                weights.size() * sizeof(float),
+                                weights.size() * sizeof(net_t),
                                 cudaHostAllocMapped));
-        memcpy(host_mem, (float *)&weights[0], weights.size() * sizeof(float));
+        memcpy(host_mem, (net_t *)&weights[0], weights.size() * sizeof(net_t));
         m_layers.back().weights.emplace_back(host_mem);
         m_layers.back().weights_size.emplace_back((int64_t)weights.size());
     } else {
         void *device_mem;
         checkCUDA(cudaMalloc(
             (void **)&device_mem,
-            weights.size() * sizeof(float))
+            weights.size() * sizeof(net_t))
         );
         checkCUDA(cudaMemcpyAsync(
             device_mem,
-            (float *)&weights[0],
-            weights.size() * sizeof(float),
+            (net_t *)&weights[0],
+            weights.size() * sizeof(net_t),
             cudaMemcpyHostToDevice,
             cudaStreamPerThread)
         );
@@ -966,7 +995,8 @@ void BackendTRT::push_weights(
     }
 }
 
-void BackendTRT::push_input_convolution(
+template <typename net_t>
+void BackendTRT<net_t>::push_input_convolution(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -985,7 +1015,8 @@ void BackendTRT::push_input_convolution(
     m_layers[layer].name = "in." + std::to_string(layer);
 }
 
-void BackendTRT::push_residual(
+template <typename net_t>
+void BackendTRT<net_t>::push_residual(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -1008,7 +1039,8 @@ void BackendTRT::push_residual(
     m_layers[layer].name = "res." + std::to_string(layer);
 }
 
-void BackendTRT::push_residual_se(
+template <typename net_t>
+void BackendTRT<net_t>::push_residual_se(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -1040,7 +1072,8 @@ void BackendTRT::push_residual_se(
     m_layers[layer].name = "res." + std::to_string(layer);
 }
 
-void BackendTRT::push_convolve(
+template <typename net_t>
+void BackendTRT<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
@@ -1081,7 +1114,8 @@ void BackendTRT::push_convolve(
     exit(EXIT_FAILURE);
 }
 
-void BackendTRT::forward_activations(
+template <typename net_t>
+void BackendTRT<net_t>::forward_activations(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
@@ -1147,7 +1181,8 @@ void BackendTRT::forward_activations(
     trtErrorRecorder.clear();
 }
 
-void BackendTRT::forward(
+template <typename net_t>
+void BackendTRT<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
@@ -1156,4 +1191,7 @@ void BackendTRT::forward(
 
     forward_activations(input, output_pol, output_val, *m_context[tid], batch_size);
 }
+
+template class BackendTRT<float>;
+template class BackendTRT<__half>;
 #endif

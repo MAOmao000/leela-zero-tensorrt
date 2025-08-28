@@ -42,6 +42,7 @@
 #include "SMP.h"
 #include "ThreadPool.h"
 
+template <typename net_t>
 class GPUScheduler : public ForwardPipe {
     class ForwardQueueEntry {
     public:
@@ -121,7 +122,7 @@ private:
 
     bool m_running = true;
     std::atomic<bool> m_draining{false};
-    std::vector<std::unique_ptr<BackendTRT>> m_backend;
+    std::vector<std::unique_ptr<BackendTRT<net_t>>> m_backend;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;

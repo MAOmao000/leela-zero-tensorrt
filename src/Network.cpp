@@ -72,7 +72,7 @@ using namespace Utils;
 static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
     symmetry_nn_idx_table;
 
-#if defined(USE_OPENCL)
+#if !defined(USE_CPU_ONLY)
 float Network::benchmark_time(const int centiseconds) {
 
     ThreadGroup tg(thread_pool);
@@ -497,9 +497,64 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 #if !defined(USE_CPU_ONLY)
 void Network::select_precision(const int channels) {
 #if defined(USE_TENSOR_RT)
-    myprintf("Initializing TensorRT (single precision).\n");
-    m_forward = init_net(
-        channels, std::make_unique<GPUScheduler>());
+    using FloatScheduler = GPUScheduler<float>;
+    using HalfScheduler = GPUScheduler<__half>;
+    if (cfg_precision == precision_t::AUTO) {
+        auto score_fp16 = float{-1.0};
+        auto score_fp32 = float{-1.0};
+        myprintf("Initializing TensorRT (autodetecting precision).\n");
+        // Setup fp16 here so that we can see if we can skip autodetect.
+        // However, if fp16 sanity check fails we will return a fp32 and pray it works.
+        auto fp16_net = std::make_unique<HalfScheduler>();
+        try {
+            myprintf("TensorRT: using fp16/half or tensor core compute support.\n");
+            m_forward = init_net(channels, std::move(fp16_net));
+            score_fp16 = benchmark_time(100);
+        } catch (...) {
+            myprintf("TensorRT: fp16/half or tensor core failed "
+                     "despite driver claiming support.\n");
+            myprintf("Falling back to single precision\n");
+            m_forward.reset();
+            m_forward = init_net(
+                channels, std::make_unique<FloatScheduler>());
+            return;
+        }
+        // Start by setting up fp32.
+        try {
+            m_forward.reset();
+            m_forward =
+                init_net(channels, std::make_unique<FloatScheduler>());
+            score_fp32 = benchmark_time(100);
+        } catch (...) {
+            // empty - if exception thrown just throw away fp32 net
+        }
+        if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
+            myprintf("Both single precision and half precision failed to run.\n");
+            throw std::runtime_error("Failed to initialize net.");
+        } else if (score_fp16 < 0.0f) {
+            myprintf("Using TensorRT single precision (half precision failed to run).\n");
+        } else if (score_fp32 < 0.0f) {
+            myprintf("Using TensorRT half precision (single precision failed to run).\n");
+            m_forward.reset();
+            m_forward =
+                init_net(channels, std::make_unique<HalfScheduler>());
+        } else if (score_fp32 * 1.05f > score_fp16) {
+            myprintf("Using TensorRT single precision (less than 5%% slower than half).\n");
+        } else {
+            myprintf("Using TensorRT half precision (at least 5%% faster than single).\n");
+            m_forward.reset();
+            m_forward =
+                init_net(channels, std::make_unique<HalfScheduler>());
+        }
+    } else if (cfg_precision == precision_t::SINGLE) {
+        myprintf("Initializing , backend (single precision).\n");
+        m_forward =
+            init_net(channels, std::make_unique<FloatScheduler>());
+    } else if (cfg_precision == precision_t::HALF) {
+        myprintf("Initializing , backend (half precision).\n");
+        m_forward = init_net(
+            channels, std::make_unique<HalfScheduler>());
+    }
 #else
     using FloatScheduler = OpenCLScheduler<float>;
     using HalfScheduler = OpenCLScheduler<half_float::half>;

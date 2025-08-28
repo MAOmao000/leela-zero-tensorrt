@@ -80,9 +80,7 @@ bool cfg_dumbpass;
 #if !defined(USE_CPU_ONLY)
 std::vector<int> cfg_gpus;
 size_t cfg_gpu_batch;
-#if !defined(USE_TENSOR_RT)
 precision_t cfg_precision;
-#endif
 #if defined(USE_OPENCL)
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
@@ -359,9 +357,7 @@ void GTP::setup_default_parameters() {
 #if !defined(USE_CPU_ONLY)
     cfg_gpus = {};
     cfg_gpu_batch = 1;
-#if !defined(USE_TENSOR_RT)
     cfg_precision = precision_t::AUTO;
-#endif
 #if defined(USE_OPENCL)
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
@@ -394,12 +390,12 @@ void GTP::setup_default_parameters() {
 
     cfg_ladder_defense = 11;
     cfg_ladder_offense = 8;
-    cfg_defense_stones = 1;
+    cfg_defense_stones = 0;
     cfg_offense_stones = 4;
     cfg_ladder_check_nodes = 10;
-    cfg_ladder_penalty_base = 1;
+    cfg_ladder_penalty_base = 2;
     cfg_ladder_penalty_winrate = 0.9f;
-    cfg_ladder_penalty_policy = 0.5f;
+    cfg_ladder_penalty_policy = 0.9f;
     cfg_ladder_min_policy = 0.0005f;
 
     cfg_analyze_tags = AnalyzeTags{};
