@@ -53,6 +53,9 @@ public:
     float eval() const {
         return m_eval;
     }
+    void set_valid(const bool valid = false) {
+        m_valid = valid;
+    }
     static SearchResult from_eval(const float eval) {
         return SearchResult(eval);
     }
@@ -125,7 +128,7 @@ private:
     float get_min_psa_ratio() const;
     void dump_stats(const FastState& state, UCTNode& parent);
     void tree_stats(const UCTNode& node);
-    std::string get_pv(FastState& state, const UCTNode& parent);
+    std::string get_pv(FastState& state, UCTNode& parent);
     std::string get_analysis(int playouts);
     bool should_resign(passflag_t passflag, float besteval);
     int est_playouts_left(int elapsed_centis, int time_for_move) const;
