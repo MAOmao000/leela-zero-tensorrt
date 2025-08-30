@@ -38,17 +38,6 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#else
-#include <pwd.h>
-#include <sys/select.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
-#endif
-
-#include "ThreadPool.h"
-
-#ifdef _WIN32
 #define lockFile(file)                                       \
     HANDLE hFile = CreateFile(                               \
         file.c_str(),                                        \
@@ -77,7 +66,17 @@
             file.c_str());                                   \
         exit(EXIT_FAILURE);                                  \
     }
+#define unlockFile()                                         \
+    if (!UnlockFileEx(hFile, 0, 0, 0, &overlapped)) {        \
+        myprintf_error("Could not unlock file.\n");          \
+    }                                                        \
+    CloseHandle(hFile);
 #else
+#include <pwd.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
 #define lockFile(file)                                       \
     int fd = open(file.c_str(), O_RDWR | O_CREAT, 0664);     \
     if (fd == -1) {                                          \
@@ -96,15 +95,6 @@
             file.c_str());                                   \
         exit(EXIT_FAILURE);                                  \
     }
-#endif
-
-#ifdef _WIN32
-#define unlockFile()                                         \
-    if (!UnlockFileEx(hFile, 0, 0, 0, &overlapped)) {        \
-        myprintf_error("Could not unlock file.\n");          \
-    }                                                        \
-    CloseHandle(hFile);
-#else
 #define unlockFile()                                         \
     fl.l_type = F_UNLCK;                                     \
     fl.l_whence = SEEK_SET;                                  \
@@ -115,6 +105,8 @@
     }                                                        \
     close(fd);
 #endif
+
+#include "ThreadPool.h"
 
 extern Utils::ThreadPool thread_pool;
 
