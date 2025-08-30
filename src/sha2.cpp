@@ -1,4 +1,4 @@
-#if defined(USE_TENSOR_RT) || defined(USE_TENSOR_FP16)
+#if defined(USE_TENSOR_RT)
 
 #include "sha2.h"
 

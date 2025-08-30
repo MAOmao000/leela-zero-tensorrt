@@ -80,7 +80,7 @@ static constexpr auto PROGRAM_VERSION_PATCH = "6";
 
 static constexpr auto MAX_CPUS = 256;
 
-#if defined(USE_OPENCL)
+#if !defined(USE_CPU_ONLY)
 /*
  * USE_HALF: Include the half-precision OpenCL implementation when building.
  * The current implementation autodetects whether half-precision is better
