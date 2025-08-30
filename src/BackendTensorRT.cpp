@@ -43,8 +43,8 @@ public:
         return m_f;
     }
 
-    operator std::vector<__half>() {
-        auto ret = std::vector<__half>(m_f.size());
+    operator std::vector<half_float::half>() {
+        auto ret = std::vector<half_float::half>(m_f.size());
         std::copy(cbegin(m_f), cend(m_f), begin(ret));
         return ret;
     }
@@ -158,7 +158,7 @@ bool BackendTRT<net_t>::build(
         std::cerr << "TensorRT backend: failed to create builder config" << std::endl;
         return false;
     }
-    if (typeid(net_t) == typeid(__half)) {
+    if (typeid(net_t) == typeid(half_float::half)) {
         config->setFlag(BuilderFlag::kFP16);
     }
 
@@ -208,8 +208,8 @@ bool BackendTRT<net_t>::build(
     // So that there are no concurrent kernel executions probably from other parts of code while profiling
     // See CUDA Runtime API document for more details related to NULL stream and synchronization behaviors
     config->setProfileStream(cudaStreamPerThread);
-    // Typical runtime allocation is much less than the 1 GiB specified below
-    config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
+    // Typical runtime allocation is much less than the 2 GiB specified below
+    config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 31);
 
     std::string plan;
     {
@@ -1193,5 +1193,5 @@ void BackendTRT<net_t>::forward(
 }
 
 template class BackendTRT<float>;
-template class BackendTRT<__half>;
+template class BackendTRT<half_float::half>;
 #endif

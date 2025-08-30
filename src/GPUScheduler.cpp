@@ -446,5 +446,5 @@ void GPUScheduler<net_t>::resume()
 }
 
 template class GPUScheduler<float>;
-template class GPUScheduler<__half>;
+template class GPUScheduler<half_float::half>;
 #endif
