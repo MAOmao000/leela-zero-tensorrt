@@ -74,7 +74,6 @@ static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
 
 #if !defined(USE_CPU_ONLY)
 float Network::benchmark_time(const int centiseconds) {
-
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
 
@@ -498,7 +497,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 void Network::select_precision(const int channels) {
 #if defined(USE_TENSOR_RT)
     using FloatScheduler = GPUScheduler<float>;
-    using HalfScheduler = GPUScheduler<__half>;
+    using HalfScheduler = GPUScheduler<half_float::half>;
     if (cfg_precision == precision_t::AUTO) {
         auto score_fp16 = float{-1.0};
         auto score_fp32 = float{-1.0};
@@ -1114,9 +1113,11 @@ void Network::nncache_clear(bool dump_stats) {
     m_nncache.clear(dump_stats);
 }
 
+#ifndef NDEBUG
 void Network::nncache_dump() {
     m_nncache.dump_stats();
 }
+#endif
 
 void Network::drain_evals() {
 #if !defined(USE_CPU_ONLY)
