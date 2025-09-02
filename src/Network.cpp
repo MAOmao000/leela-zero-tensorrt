@@ -263,19 +263,6 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     wtfile.clear();
     wtfile.seekg(0, std::ios::beg);
 
-#if defined(USE_TENSOR_RT)
-    auto fileSize = wtfile.tellg();
-    std::string str;
-    str.resize(fileSize);
-    wtfile.read(&str[0], fileSize);
-    char hashResultBuf[65];
-    SHA2::get256((const uint8_t*)str.data(), str.size(), hashResultBuf);
-    m_model_hash.assign(hashResultBuf);
-    // Re-read file and process
-    wtfile.clear();
-    wtfile.seekg(0, std::ios::beg);
-#endif
-
     // Get the file format id out of the way
     std::getline(wtfile, line);
 
@@ -454,6 +441,21 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         buffer.write(chunkBuffer.data(), bytesRead);
     }
     gzclose(gzhandle);
+
+#if defined(USE_TENSOR_RT)
+    std::string str;
+    buffer.seekg(0, std::ios::end);
+    auto fileSize = buffer.tellg();
+    str.resize(fileSize);
+    buffer.seekg(0, std::ios::beg);
+    buffer.read(&str[0], fileSize);
+    char hashResultBuf[65];
+    SHA2::get256((const uint8_t*)str.data(), str.size(), hashResultBuf);
+    m_model_hash.assign(hashResultBuf);
+    // Re-read file and process
+    buffer.clear();
+    buffer.seekg(0, std::ios::beg);
+#endif
 
     // Read format version
     auto line = std::string{};

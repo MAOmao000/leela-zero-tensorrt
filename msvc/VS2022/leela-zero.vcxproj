@@ -137,7 +137,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>ClangCL</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
@@ -172,7 +172,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>leelaz_cpu</TargetName>
+    <TargetName>leelaz_trt</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
     <IncludePath>C:\IGO\leela-zero\src\Eigen;$(IncludePath)</IncludePath>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>
@@ -242,7 +242,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_CPU_ONLY;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>C:\lib\oneDNN\include;C:\lib\oneDNN\build\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\Program Files\TensorRT-10.13.0.35\include;C:\lib\OpenCL-SDK\install\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\include;C:\Program Files\NVIDIA\CUDNN\v9.10\include\12.9;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -263,7 +263,7 @@
       <OpenMPSupport>
       </OpenMPSupport>
       <FloatingPointModel>Fast</FloatingPointModel>
-      <AdditionalOptions>/arch:AVX2 /D"__FMA__" -Wno-nan-infinity-disabled -Wno-unused-function %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/arch:AVX2 /D"__FMA__" %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
     <Link>
