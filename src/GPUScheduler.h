@@ -48,17 +48,14 @@ class GPUScheduler : public ForwardPipe {
     public:
         std::mutex mutex;
         std::condition_variable cv;
-        const bool full_batch;
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
         ForwardQueueEntry(
             const std::vector<float>& input,
             std::vector<float>& output_pol,
-            std::vector<float>& output_val,
-            const bool full)
-                : full_batch(full),
-                in(input),
+            std::vector<float>& output_val)
+                : in(input),
                 out_p(output_pol),
                 out_v(output_val) {}
     };
@@ -81,8 +78,7 @@ public:
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
-        std::vector<float>& output_val,
-        const bool full_batch
+        std::vector<float>& output_val
     ) override;
 
 private:
@@ -117,11 +113,12 @@ private:
         const size_t gnum,
         const size_t tid = -1
     );
-    void drain() override;
-    void resume() override;
+    void set_gpu_run(int running) override {
+        m_running.store(running);
+        m_cv.notify_all();
+    }
 
-    bool m_running = true;
-    std::atomic<bool> m_draining{false};
+    std::atomic<int> m_running{Network::INITIAL};
     std::vector<std::unique_ptr<BackendTRT<net_t>>> m_backend;
 
     std::mutex m_mutex;

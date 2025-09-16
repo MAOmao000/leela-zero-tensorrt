@@ -46,15 +46,13 @@ class OpenCLScheduler : public ForwardPipe {
     public:
         std::mutex mutex;
         std::condition_variable cv;
-        const bool full_batch;
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
         ForwardQueueEntry(const std::vector<float>& input,
                           std::vector<float>& output_pol,
-                          std::vector<float>& output_val,
-                          const bool full)
-            : full_batch(full), in(input), out_p(output_pol), out_v(output_val) {}
+                          std::vector<float>& output_val)
+            : in(input), out_p(output_pol), out_v(output_val) {}
     };
 
 public:
@@ -66,8 +64,7 @@ public:
                     const std::string &model_hash) override;
     bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
-                 std::vector<float>& output_val,
-                 const bool full_batch) override;
+                 std::vector<float>& output_val) override;
     bool needs_autodetect() override;
     void push_weights(unsigned int filter_size,
                       unsigned int channels,
@@ -101,11 +98,12 @@ private:
                        unsigned int outputs, const std::vector<float>& weights);
 
     void batch_worker(size_t gnum);
-    void drain() override;
-    void resume() override;
+    void set_gpu_run(int running) override {
+        m_running.store(running);
+        m_cv.notify_all();
+    }
 
-    bool m_running = true;
-    std::atomic<bool> m_draining{false};
+    std::atomic<int> m_running{Network::INITIAL};
     std::vector<std::unique_ptr<OpenCL_Network<net_t>>> m_networks;
     std::vector<std::unique_ptr<OpenCL<net_t>>> m_opencl;
 

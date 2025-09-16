@@ -89,7 +89,7 @@ GPUScheduler<net_t>::~GPUScheduler()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
-        m_running = false;
+        set_gpu_run(Network::TERMINATION);
     }
     m_cv.notify_all();
     for (auto& x : m_worker_threads) {
@@ -294,15 +294,14 @@ template <typename net_t>
 bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
-    std::vector<float>& output_val,
-    const bool full_batch)
+    std::vector<float>& output_val)
 {
-    if (m_draining.load()) {
+    if (m_running.load() == Network::TERMINATION) {
         return false;
     }
 
     auto entry =
-        std::make_shared<ForwardQueueEntry>(input, output_pol, output_val, full_batch);
+        std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
     size_t queue_size = 0;
     std::unique_lock<std::mutex> lk(entry->mutex);
     {
@@ -310,7 +309,7 @@ bool GPUScheduler<net_t>::forward(
         m_forward_queue.emplace_back(entry);
         queue_size = m_forward_queue.size();
     }
-    if (!full_batch || queue_size >= cfg_batch_size) {
+    if (m_running.load() == Network::INITIAL || queue_size >= cfg_batch_size) {
         m_cv.notify_one();
     }
     entry->cv.wait(lk);
@@ -334,10 +333,9 @@ void GPUScheduler<net_t>::batch_worker(
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
         std::unique_lock<std::mutex> lk(m_mutex);
         m_cv.wait(lk, [this] {
-            return !m_running ||
-                m_draining.load() ||
+            return m_running.load() == Network::TERMINATION ||
                 m_forward_queue.size() >= cfg_batch_size ||
-                (m_forward_queue.size() == 1 && !m_forward_queue.front()->full_batch);
+                (m_forward_queue.size() >= 1 && m_running.load() == Network::INITIAL);
         });
         // first:  m_running:true  m_draining:false m_forward_queue.size:1
         // second: m_running:true  m_draining:false m_forward_queue.size:10
@@ -345,7 +343,7 @@ void GPUScheduler<net_t>::batch_worker(
         // drain:  m_running:true  m_draining:true  m_forward_queue.size:0-10
         // next:   m_running:true  m_draining:true  m_forward_queue.size:0
         // quit:   m_running:false m_draining:false m_forward_queue.size:0
-        if (!m_running) {
+        if (m_running.load() == Network::TERMINATION) {
             return inputs;
         }
         auto count = m_forward_queue.size();
@@ -353,8 +351,7 @@ void GPUScheduler<net_t>::batch_worker(
             return inputs;
         } else if (count >= static_cast<size_t>(cfg_batch_size)) {
             count = cfg_batch_size;
-        } else if (!m_draining.load() &&
-            m_forward_queue.front()->full_batch) {
+        } else if (m_running.load() == Network::SIMULATION) {
             return inputs;
         }
         // Move 'count' evals from shared queue to local list.
@@ -370,7 +367,7 @@ void GPUScheduler<net_t>::batch_worker(
     while (true) {
         auto inputs = pickup_task();
 
-        if (!m_running) {
+        if (m_running.load() == Network::TERMINATION) {
             return;
         }
         auto count = inputs.size();
@@ -391,7 +388,7 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
-        if (!m_draining.load()) {
+        if (m_running.load() != Network::TERMINATION) {
             // run the NN evaluation
             m_backend[gnum]->forward(
                 batch_input,
@@ -422,27 +419,6 @@ void GPUScheduler<net_t>::batch_worker(
             index++;
         }
     }
-}
-
-template <typename net_t>
-void GPUScheduler<net_t>::drain()
-{
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
-    m_draining.exchange(true);
-    m_cv.notify_all();
-}
-
-template <typename net_t>
-void GPUScheduler<net_t>::resume()
-{
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        m_forward_queue.clear();
-    }
-    // UCTNode::think() should wait for all child threads to complete before resuming.
-    m_draining.exchange(false);
 }
 
 template class GPUScheduler<float>;
