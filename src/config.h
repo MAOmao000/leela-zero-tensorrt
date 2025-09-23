@@ -76,7 +76,7 @@ enum class NetworkType {
 static constexpr auto PROGRAM_NAME = "Leela Zero";
 static constexpr auto PROGRAM_VERSION_MAJOR = "2";
 static constexpr auto PROGRAM_VERSION_MINOR = "0";
-static constexpr auto PROGRAM_VERSION_PATCH = "9";
+static constexpr auto PROGRAM_VERSION_PATCH = "10";
 
 static constexpr auto MAX_CPUS = 256;
 
